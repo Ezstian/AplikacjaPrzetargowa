@@ -64,6 +64,12 @@ class PrzetargAppApplicationTests {
 		mockMvc.perform(get("/PanelAdministratora.html").session(adminSession))
 				.andExpect(status().isOk())
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.string(org.hamcrest.Matchers.containsString("UzytkownicyAdministratora.html")))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("id=\"createUserForm\""))));
+		mockMvc.perform(get("/UzytkownicyAdministratora.html").session(adminSession))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
 						.string(org.hamcrest.Matchers.containsString("id=\"createUserForm\"")));
 		mockMvc.perform(get("/api/users/admin").param("query", target.getEmail()).session(adminSession))
 				.andExpect(status().isOk())
@@ -213,6 +219,8 @@ class PrzetargAppApplicationTests {
 		mockMvc.perform(get("/api/zrodla").session(regularSession))
 				.andExpect(status().isForbidden());
 		mockMvc.perform(get("/PanelAdministratora.html").session(regularSession))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(get("/UzytkownicyAdministratora.html").session(regularSession))
 				.andExpect(status().isForbidden());
 		mockMvc.perform(get("/PanelPrzetargow.html"))
 				.andExpect(status().is3xxRedirection())

@@ -67,6 +67,7 @@ public class ZabezpieczeniaConfig {
                         .requestMatchers("/api/internal/**").permitAll()
                         .requestMatchers(
                                 "/PanelAdministratora.html",
+                                "/UzytkownicyAdministratora.html",
                                 "/api/users/admin/**",
                                 "/api/zrodla/**",
                                 "/api/slowa-kluczowe/**",

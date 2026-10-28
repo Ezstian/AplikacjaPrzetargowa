@@ -37,7 +37,7 @@ Port PostgreSQL wewnątrz sieci Compose pozostaje `5432`; domyślnie na hoście 
 
 Przy pierwszym uruchomieniu `ADMIN_EMAIL`, `ADMIN_PASSWORD` i `ADMIN_PHONE` tworzą konto administratora. Hasło jest zapisywane jako hash BCrypt. Jeśli konto z tym adresem już istnieje i ma rolę administratora, start nie zmienia jego hasła. Zmiana `ADMIN_PASSWORD` w `.env` nie resetuje istniejącego konta — administrator może ustawić nowe hasło dla kont z panelu. Jeśli adres jest przypisany do konta bez roli administratora albo numer telefonu jest zajęty, aplikacja przerwie start z czytelnym błędem.
 
-Logowanie: <http://localhost:8080/Logowanie.html>. Brak wbudowanego konta i domyślnego hasła. Użytkownik może założyć konto wykonawcy lub organizatora przez formularz rejestracji; nowych administratorów tworzy się wyłącznie przez konfigurację środowiska. Panel administratora może tworzyć konta wykonawców i organizatorów, zmieniać ich role, resetować hasła i usuwać konta bez powiązanych ofert lub przetargów.
+Logowanie: <http://localhost:8080/Logowanie.html>. Brak wbudowanego konta i domyślnego hasła. Użytkownik może założyć konto wykonawcy lub organizatora przez formularz rejestracji; nowych administratorów tworzy się wyłącznie przez konfigurację środowiska. Panel administratora zarządza źródłami, regułami i statystykami, a osobna strona `/UzytkownicyAdministratora.html` służy do tworzenia kont wykonawców i organizatorów, zmiany ról, resetu haseł i usuwania kont bez powiązanych ofert lub przetargów.
 
 ## Źródła i automatyczny import
 
