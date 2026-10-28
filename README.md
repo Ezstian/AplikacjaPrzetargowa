@@ -1,69 +1,145 @@
-# Przetarg App
+# Wewnętrzny Portal Monitoringu i Selekcji Przetargów
 
-## Konfiguracja i uruchomienie
+Portal gromadzi ogłoszenia z konfigurowanych źródeł API, usuwa duplikaty, ocenia ich dopasowanie do słów kluczowych i udostępnia zespołowi widoki operacyjne oraz statystyki. Aplikacja zawiera również konta organizatorów i wykonawców oraz obsługę publikowania postępowań i ofert.
 
-Projekt wymaga JDK 21. Po skonfigurowaniu bazy PostgreSQL można uruchomić aplikację poleceniem:
+## Architektura
+
+- **Aplikacja Java 25 LTS**: Spring Boot 4, Spring MVC, Spring Security, Spring Data JPA i Hibernate.
+- **Baza**: PostgreSQL 17; kontener utrzymuje dane w wolumenie `postgres_data`.
+- **Ingestion Engine**: Python 3.13, Requests, APScheduler i Beautiful Soup. Pobiera konfigurację źródeł z Java API, pobiera ogłoszenia z JSON API, normalizuje je i przesyła do importu.
+- **GUI**: statyczne strony HTML serwowane przez aplikację Java. Panel administracyjny obsługuje konta, źródła, słowa kluczowe i analitykę; panel operacyjny zawiera wyszukiwarkę, filtry i zmianę statusu.
+- **Uruchamianie**: Docker Compose buduje i uruchamia PostgreSQL, aplikację Java oraz harmonogram Python.
+
+## Uruchomienie lokalne
+
+Wymagany jest Docker z Docker Compose. Przygotuj lokalny plik `.env` na podstawie przykładu i ustaw własne dane:
 
 ```powershell
-.\mvnw.cmd spring-boot:run
+Copy-Item .env.example .env
+notepad .env
 ```
 
-Ustawienia bazy przekazuje się przez `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME` i `DB_PASSWORD`.
+Zmień co najmniej `DB_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_PHONE` i `INGESTION_API_KEY`. Hasło administratora musi mieć co najmniej 8 znaków, a telefon dokładnie 9 cyfr. Ustaw długi, losowy klucz importu; ta sama wartość jest przekazywana aplikacji Java i workerowi Python. Plik `.env` jest ignorowany przez Git — nie zapisuj w nim przykładowych ani prawdziwych haseł w repozytorium.
 
-Aby uruchomić aplikację i PostgreSQL w Docker Compose:
+Uruchom cały stos jednym poleceniem:
 
 ```powershell
 docker compose up --build
 ```
 
-Bazę można przeglądać w pgAdminie, łącząc się z hostem `localhost` i portem `5432`. Domyślnie baza nazywa się `przetarg_app_db`, a użytkownik `przetarg`; wartości można zmienić przez `DB_NAME`, `DB_USERNAME` i `DB_PASSWORD`. Jeśli port `5432` jest zajęty, ustaw `POSTGRES_PORT` na wolny port hosta.
+Portal będzie dostępny pod adresem <http://localhost:8080>. Porty Java i PostgreSQL są domyślnie przypięte do `127.0.0.1`; pierwsze budowanie pobiera obrazy i zależności, więc trwa dłużej. Worker czeka na gotowość API Java, wykonuje pierwszy przebieg pobierania i następnie uruchamia harmonogram. Domyślny interwał to 3600 sekund; można go zmienić przez `INGESTION_INTERVAL_SECONDS` (minimum 60 sekund). Stan PostgreSQL pozostaje w wolumenie `postgres_data`.
 
-Aby utworzyć pierwsze konto administratora w Dockerze, utwórz w katalogu projektu lokalny plik `.env` z własnymi danymi:
+Zatrzymanie: `Ctrl+C` lub `docker compose down`. Polecenie `docker compose down -v` usuwa również trwały wolumen bazy i wszystkie zapisane w nim dane.
 
-```dotenv
-ADMIN_EMAIL=twoj-adres@example.com
-ADMIN_PASSWORD=twoje-wlasne-haslo
-ADMIN_PHONE=500600700
+Port PostgreSQL wewnątrz sieci Compose pozostaje `5432`; domyślnie na hoście baza jest dostępna pod `127.0.0.1:5433`, aby uniknąć konfliktu z lokalnym PostgreSQL. Zmień `POSTGRES_PORT` w `.env`, jeśli port 5433 też jest zajęty. Jeśli port aplikacji 8080 jest zajęty, ustaw `APP_PORT=8081`. Dla wdrożenia za HTTPS ustaw `SESSION_COOKIE_SECURE=true` i skonfiguruj TLS na reverse proxy.
+
+### Konto administratora
+
+Przy pierwszym uruchomieniu `ADMIN_EMAIL`, `ADMIN_PASSWORD` i `ADMIN_PHONE` tworzą konto administratora. Hasło jest zapisywane jako hash BCrypt. Jeśli konto z tym adresem już istnieje i ma rolę administratora, start nie zmienia jego hasła. Zmiana `ADMIN_PASSWORD` w `.env` nie resetuje istniejącego konta — administrator może ustawić nowe hasło dla kont z panelu. Jeśli adres jest przypisany do konta bez roli administratora albo numer telefonu jest zajęty, aplikacja przerwie start z czytelnym błędem.
+
+Logowanie: <http://localhost:8080/Logowanie.html>. Brak wbudowanego konta i domyślnego hasła. Użytkownik może założyć konto wykonawcy lub organizatora przez formularz rejestracji; nowych administratorów tworzy się wyłącznie przez konfigurację środowiska. Panel administratora może tworzyć konta wykonawców i organizatorów, zmieniać ich role, resetować hasła i usuwać konta bez powiązanych ofert lub przetargów.
+
+## Źródła i automatyczny import
+
+Po zalogowaniu jako administrator otwórz **Panel administratora → Źródła i endpointy pobierania**:
+
+1. Wprowadź nazwę, URL publicznego endpointu zwracającego JSON oraz metodę `GET` lub `POST`.
+2. Skonfiguruj obiekt JSON, który określa parametry żądania i mapowanie odpowiedzi.
+3. Zapisz źródło, a następnie użyj przycisku **Testuj**. Test sprawdza połączenie, kod HTTP i liczbę elementów pod `itemsPath`.
+4. Pozostaw źródło aktywne, aby worker uwzględniał je przy kolejnych przebiegach.
+
+Przykładowa konfiguracja dla odpowiedzi `{"data":{"items":[...]}}`:
+
+```json
+{
+  "itemsPath": "data.items",
+  "query": {
+    "limit": 100
+  },
+  "headers": {
+    "Authorization": "Bearer ${SOURCE_API_TOKEN}"
+  },
+  "fields": {
+    "zewnetrzneId": "id",
+    "tytul": "title",
+    "opis": "description",
+    "kategoria": "category",
+    "lokalizacja": "location",
+    "terminSkladaniaOfert": "deadline",
+    "adresZrodla": "url"
+  }
+}
 ```
 
-Hasło musi mieć co najmniej 8 znaków, a telefon dokładnie 9 cyfr i nie może być już przypisany do innego konta. Uruchom lub odtwórz kontener aplikacji poleceniem `docker compose up -d app`, a następnie zaloguj się adresem z `ADMIN_EMAIL` i ustawionym hasłem pod adresem `http://localhost:8080/Logowanie.html`. Plik `.env` jest ignorowany przez Git — nie wpisuj prawdziwych danych logowania do kodu ani nie wysyłaj ich innym osobom.
+`itemsPath` wskazuje listę rekordów ścieżką z kropkami; pusty łańcuch oznacza, że cała odpowiedź jest tablicą. `query` dodaje parametry URL dla obu metod, `headers` ustawia nagłówki, a przy `POST` pole `body` określa obiekt wysyłany jako JSON. Wartości nagłówków mogą używać `${NAZWA_ZMIENNEJ}`; `SOURCE_API_TOKEN` z `.env` jest przekazywany do obu kontenerów, a dodatkowe zmienne można dopisać do ich sekcji `environment` w `compose.yaml`. Nie umieszczaj sekretów dostawcy API w publicznych plikach ani w repozytorium.
 
-Nie ma wbudowanego konta ani domyślnego hasła. Jeśli konto administratora z podanym adresem już istnieje, aplikacja nie zmienia jego hasła; samo dopisanie go do `.env` nie resetuje istniejącego konta.
+Mapowania `fields` wskazują ścieżki w rekordzie źródłowym do pól wymaganych przez portal. Wymagane są: zewnętrzny identyfikator, tytuł, opis, kategoria, lokalizacja i termin składania ofert; `adresZrodla` jest opcjonalny. Termin musi być datą ISO-8601. Ingestion Engine usuwa znaczniki HTML i normalizuje białe znaki w tekstach. Niepoprawny rekord jest pomijany z ostrzeżeniem w logach, pozostałe rekordy źródła nadal są przetwarzane.
 
-Import z modułu pobierającego wymaga ustawienia `INGESTION_API_KEY`. Klucz należy przekazywać w nagłówku `X-Ingestion-Key`; bez skonfigurowanego klucza endpointy wewnętrzne odmawiają działania.
+Worker pobiera tylko aktywne źródła. Dla każdego ogłoszenia wysyła żądanie do Java API. Identyfikator ogłoszenia w ramach źródła jest kluczem deduplikacji: ponowny import aktualizuje istniejący rekord zamiast tworzyć duplikat. Projekt zawiera adapter dla konfigurowalnych API JSON; konkretne API może wymagać własnego mapowania pól, parametrów i nagłówków. Harmonogram nie obsługuje obecnie paginacji API.
 
-### Port 8080 jest zajęty
+## Reguły klasyfikacji i widok operacyjny
 
-Jeśli `docker ps` pokazuje kontener `przetarg-app-app-1`, to on już uruchamia tę aplikację. Nie uruchamiaj wtedy drugiej kopii przez `spring-boot:run`; otwórz `http://localhost:8080/Rejestracja.html`. Aby przebudować i uruchomić aplikację oraz bazę razem, użyj `docker compose up --build -d`.
+Administrator dodaje w panelu reguły `POSZUKIWANE` i `WYKLUCZAJACE`, kategorię/tag oraz wagę punktową. Reguły są dopasowywane bez rozróżniania wielkości liter do tytułu i opisu:
 
-Jeśli port 8080 zajmuje inna aplikacja, uruchom stos na porcie 8081:
+- dopasowane aktywne frazy poszukiwane sumują punkty;
+- dowolna aktywna fraza wykluczająca powoduje status `ODRZUCONY`;
+- brak dopasowanych fraz poszukiwanych lub wynik 0 punktów również oznacza `ODRZUCONY`;
+- dodatnia punktacja bez frazy wykluczającej daje `INTERESUJACY`;
+- `NOWY` jest statusem początkowym przed klasyfikacją lub ręcznym rozstrzygnięciem.
+
+Zmiana reguł ponownie klasyfikuje zapisane ogłoszenia, ale nie nadpisuje statusu oznaczonego jako ustawiony ręcznie. Użytkownik może zmieniać status z tabeli, a zmiany trafiają do historii. Panel przetargów filtruje po statusie, dacie utworzenia (`od`, `doDaty`), punktacji (`minPunktacja`, `maxPunktacja`), źródle (`zrodloId`), dopasowanym słowie (`slowoId`) i tekście (`query`, szukanie w tytule, opisie, kategorii i lokalizacji). Statystyki lejka i skuteczność fraz są dostępne administratorowi w panelu.
+
+Status operacyjny (`NOWY`, `INTERESUJACY`, `ODRZUCONY`) jest oddzielony od statusu postępowania (`OTWARTY`, `ZAMKNIETY` lub wyliczonego `ZAKONCZONY`).
+
+## Konta i bezpieczeństwo
+
+- Hasła użytkowników są kodowane przez BCrypt; odpowiedzi API nie zawierają haseł.
+- Uwierzytelnienie korzysta z sesji serwerowej. Rola użytkownika jest odczytywana z bazy przy obsłudze żądań. Cookie sesji ma `SameSite=Strict`; w środowisku produkcyjnym używaj HTTPS i włącz `SESSION_COOKIE_SECURE=true`.
+- Żądania zmieniające stan wymagają tokenu CSRF (`GET /api/csrf`, następnie nagłówek `X-XSRF-TOKEN`). Formularze przeglądarkowe pobierają i wysyłają go automatycznie.
+- Endpointy `/api/zrodla/**`, `/api/slowa-kluczowe/**`, `/api/analytics/**` i `/api/users/admin/**` wymagają roli administratora. Pozostałe prywatne endpointy wymagają zalogowania; dostęp do profilu ograniczono do właściciela lub administratora.
+- API wewnętrzne modułu pobierającego (`/api/internal/**`) wymaga nagłówka `X-Ingestion-Key`, porównywanego w sposób stałoczasowy. Bez `INGESTION_API_KEY` import jest wyłączony. Udostępniaj port aplikacji tylko zaufanym użytkownikom i nie wystawiaj endpointów wewnętrznych bezpośrednio do Internetu.
+- Baza PostgreSQL jest przeznaczona do wewnętrznej sieci aplikacji; zmień hasło i ogranicz dostęp sieciowy przed wdrożeniem produkcyjnym.
+
+## API
+
+| Endpoint | Dostęp | Działanie |
+|---|---|---|
+| `GET /api/csrf` | publiczny | Pobranie tokenu CSRF dla przeglądarki |
+| `POST /api/users/rejestracja`, `POST /api/users/login` | publiczny + CSRF | Rejestracja i logowanie |
+| `POST /api/users/logout` | zalogowany + CSRF | Zakończenie sesji |
+| `GET /api/users/{id}` | właściciel lub administrator | Profil użytkownika |
+| `/api/users/admin/**` | administrator | Konta, role, reset hasła i usuwanie |
+| `GET/POST/PUT/DELETE /api/zrodla` | administrator | Konfiguracja źródeł |
+| `POST /api/zrodla/{id}/test` | administrator | Test HTTP i odpowiedzi JSON źródła |
+| `GET/POST/PUT/DELETE /api/slowa-kluczowe` | administrator | Słownik reguł klasyfikacji |
+| `GET /api/analytics/przetargi?od=...&doDaty=...` | administrator | Statystyki i skuteczność słów |
+| `GET /api/internal/sources` | klucz importu | Lista aktywnych źródeł dla workera |
+| `POST /api/internal/tenders` | klucz importu | Import lub aktualizacja ogłoszenia |
+| `GET /api/przetargi` | zalogowany | Lista przetargów i filtrów wymienionych wyżej |
+| `GET /api/przetargi/filtry` | zalogowany | Opcje aktywnych źródeł i fraz |
+| `PATCH /api/przetargi/{id}/status` | zalogowany | Ręczna zmiana statusu i wpis w historii |
+| `GET /api/przetargi/{id}/historia` | zalogowany | Historia zmian statusu |
+| `POST /api/przetargi`, `POST /api/przetargi/{id}/oferty` | zalogowany; uprawnienia roli | Publikacja postępowania i składanie oferty |
+
+## Testy i diagnostyka
+
+Testy backendu (wymagany JDK 25 lub nowszy):
 
 ```powershell
-$env:APP_PORT = "8081"
-docker compose up --build -d
+.\mvnw.cmd clean test
 ```
 
-Wtedy otwórz `http://localhost:8081/Rejestracja.html`. `APP_PORT` zmienia port na komputerze; aplikacja w kontenerze nadal nasłuchuje na 8080.
-
-## API Java
-
-- `POST /api/users/rejestracja`, `POST /api/users/login` — rejestracja i logowanie; pozostałe API wymaga sesji.
-- `GET/POST/PUT/DELETE /api/zrodla` — administracja źródłami pobierania.
-- `GET/POST/PUT/DELETE /api/slowa-kluczowe` — administracja frazami `POSZUKIWANE` i `WYKLUCZAJACE`.
-- `GET /api/internal/sources` — aktywne konfiguracje źródeł dla modułu pobierającego.
-- `POST /api/internal/tenders` — import lub aktualizacja ogłoszenia, deduplikowane przez identyfikator źródła i identyfikator zewnętrzny.
-- `GET /api/przetargi` — wyszukiwanie; obsługuje `status`, `od`, `doDaty`, `minPunktacja`, `maxPunktacja`, `zrodloId`, `slowoId` i `query`.
-- `GET /api/przetargi/filtry` — bezpieczne opcje źródeł i aktywnych słów do filtrowania.
-- `PATCH /api/przetargi/{id}/status` — ręczna zmiana statusu przez zalogowanego użytkownika; historia zmian jest dostępna pod `/api/przetargi/{id}/historia`.
-- `/PanelPrzetargow.html` — tabela przetargów podzielona na nowe, interesujące i odrzucone; filtry obejmują datę, status, punktację, źródło, słowo kluczowe i tekst. Zmiany statusu są zapisywane w historii.
-- `GET /api/analytics/przetargi` — statystyki lejka i skuteczność słów kluczowych.
-- `POST /api/users/admin` i `PUT /api/users/admin/{id}/haslo` — administracyjne tworzenie kont i reset hasła.
-- `/PanelAdministratora.html` — panel administratora do wyszukiwania kont, tworzenia użytkowników, zmiany ról, resetowania haseł i usuwania kont.
-
-Aktywne frazy poszukiwane dodają przypisaną punktację. Dopasowanie frazy wykluczającej ma pierwszeństwo; brak punktowanych dopasowań albo wykrycie frazy wykluczającej oznacza status `ODRZUCONY`, a dodatnia punktacja bez wykluczeń — `INTERESUJACY`. Ręcznie ustawiony status jest zachowywany podczas kolejnego przeliczenia. Status operacyjny jest oddzielony od statusu składania ofert (`OTWARTY`/`ZAMKNIETY`).
-
-## Testy
+Testy workera Python:
 
 ```powershell
-.\mvnw.cmd -Dtest=PrzetargAppApplicationTests test
+python -m pip install -r ingestion\requirements.txt
+python -m unittest discover -s ingestion -p "test_*.py"
 ```
+
+Logi kontenerów:
+
+```powershell
+docker compose logs -f app ingestion db
+```
+
+Schemat PostgreSQL jest utrzymywany przez Flyway. Nowa baza uruchamia migrację `V1__create_tender_portal_schema.sql`, a Hibernate sprawdza zgodność encji ze schematem (`ddl-auto=validate`) zamiast modyfikować go przy starcie. Dla istniejącej, niepustej bazy włączono baseline na wersji 1: Flyway nie wykona w niej ponownie migracji początkowej, a Hibernate zweryfikuje tabele. Przed podłączeniem starszej bazy wykonaj kopię zapasową; jeśli jej schemat różni się od encji, aplikacja zatrzyma start i trzeba przygotować osobną migrację danych/schematu.

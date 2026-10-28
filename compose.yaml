@@ -6,11 +6,11 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME:-przetarg_app_db}
       POSTGRES_USER: ${DB_USERNAME:-przetarg}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-przetarg_dev_password}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
@@ -31,12 +31,29 @@ services:
       DB_PORT: 5432
       DB_NAME: ${DB_NAME:-przetarg_app_db}
       DB_USERNAME: ${DB_USERNAME:-przetarg}
-      DB_PASSWORD: ${DB_PASSWORD:-przetarg_dev_password}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
-      ADMIN_PHONE: ${ADMIN_PHONE:-666999666}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
+      ADMIN_PHONE: ${ADMIN_PHONE:?Set ADMIN_PHONE in .env}
+      INGESTION_API_KEY: ${INGESTION_API_KEY:?Set INGESTION_API_KEY in .env}
+      SOURCE_API_TOKEN: ${SOURCE_API_TOKEN:-}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "127.0.0.1:${APP_PORT:-8080}:8080"
+    restart: unless-stopped
+
+  ingestion:
+    build:
+      context: ./ingestion
+      dockerfile: Dockerfile
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      JAVA_API_URL: http://app:8080
+      INGESTION_API_KEY: ${INGESTION_API_KEY:?Set INGESTION_API_KEY in .env}
+      SOURCE_API_TOKEN: ${SOURCE_API_TOKEN:-}
+      INGESTION_INTERVAL_SECONDS: ${INGESTION_INTERVAL_SECONDS:-3600}
     restart: unless-stopped
 
 volumes:

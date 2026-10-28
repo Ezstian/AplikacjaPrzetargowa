@@ -10,7 +10,7 @@
 <body class="min-h-screen bg-slate-950 text-slate-100">
     <header class="sticky top-0 z-10 border-b border-slate-800 bg-slate-950/95 backdrop-blur">
         <div class="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-y-3 px-6 py-4">
-            <a href="index.html" class="text-xl font-black text-white">PRZETARG<span class="text-cyan-400"> APP</span></a>
+            <a class="text-xl font-black text-white">PRZETARG<span class="text-cyan-400"> APP</span></a>
             <div class="flex items-center gap-4">
                 <nav class="order-3 flex w-full items-center justify-center gap-3 text-sm sm:order-none sm:w-auto" aria-label="Nawigacja panelu">
                     <a href="#tenders" class="text-slate-300 hover:text-white">Przetargi</a>
@@ -201,7 +201,15 @@
         const moneyFormatter = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN' });
 
         async function api(path, options = {}) {
-            const response = await fetch(path, options);
+            const method = (options.method || 'GET').toUpperCase();
+            const headers = new Headers(options.headers || {});
+            if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+                const csrfResponse = await fetch('/api/csrf');
+                if (!csrfResponse.ok) throw new Error('Nie udało się pobrać tokenu bezpieczeństwa.');
+                const csrf = await csrfResponse.json();
+                headers.set(csrf.headerName, csrf.token);
+            }
+            const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
             const body = response.status === 204 ? null : await response.json().catch(() => null);
             if (!response.ok) {
                 if (response.status === 401) {

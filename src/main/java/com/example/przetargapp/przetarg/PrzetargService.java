@@ -3,7 +3,6 @@ package com.example.przetargapp.przetarg;
 import com.example.przetargapp.user.Rola;
 import com.example.przetargapp.user.User;
 import com.example.przetargapp.user.UserRepository;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,12 +13,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
 
 @Service
-@RequiredArgsConstructor
 public class PrzetargService {
     private final PrzetargRepository przetargRepository;
     private final OfertaRepository ofertaRepository;
@@ -28,6 +27,23 @@ public class PrzetargService {
     private final SlowoKluczoweRepository slowoKluczoweRepository;
     private final SilnikKlasyfikacjiPrzetargow silnikKlasyfikacji;
     private final PrzetargHistoriaStatusuRepository historiaRepository;
+
+    public PrzetargService(
+            PrzetargRepository przetargRepository,
+            OfertaRepository ofertaRepository,
+            UserRepository userRepository,
+            ZrodloPrzetarguRepository zrodloRepository,
+            SlowoKluczoweRepository slowoKluczoweRepository,
+            SilnikKlasyfikacjiPrzetargow silnikKlasyfikacji,
+            PrzetargHistoriaStatusuRepository historiaRepository) {
+        this.przetargRepository = przetargRepository;
+        this.ofertaRepository = ofertaRepository;
+        this.userRepository = userRepository;
+        this.zrodloRepository = zrodloRepository;
+        this.slowoKluczoweRepository = slowoKluczoweRepository;
+        this.silnikKlasyfikacji = silnikKlasyfikacji;
+        this.historiaRepository = historiaRepository;
+    }
 
     @Transactional(readOnly = true)
     public List<PrzetargResponse> listaPrzetargow() {
@@ -172,11 +188,15 @@ public class PrzetargService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Źródło jest nieaktywne");
         }
 
-        Przetarg przetarg = przetargRepository
-                .findByZrodloIdAndZewnetrzneId(request.zrodloId(), request.zewnetrzneId().trim())
-                .orElse(null);
-        boolean nowy = przetarg == null;
-        if (nowy) {
+        Optional<Przetarg> existingPrzetarg = przetargRepository
+                .findByZrodloIdAndZewnetrzneId(request.zrodloId(), request.zewnetrzneId().trim());
+        boolean nowy;
+        Przetarg przetarg;
+        if (existingPrzetarg.isPresent()) {
+            nowy = false;
+            przetarg = existingPrzetarg.get();
+        } else {
+            nowy = true;
             przetarg = Przetarg.builder().zrodlo(zrodlo).zewnetrzneId(request.zewnetrzneId().trim()).build();
         }
         przetarg.setTytul(request.tytul().trim());
@@ -247,6 +267,11 @@ public class PrzetargService {
         String status = przetarg.getStatus() == StatusPrzetargu.ZAMKNIETY
                 ? "ZAMKNIETY"
                 : przetarg.getTerminSkladaniaOfert().isAfter(LocalDateTime.now()) ? "OTWARTY" : "ZAKONCZONY";
+        List<String> frazyDopasowanychSlow = new ArrayList<>();
+        for (SlowoKluczowe slowo : przetarg.getDopasowaneSlowa()) {
+            frazyDopasowanychSlow.add(slowo.getFraza());
+        }
+        java.util.Collections.sort(frazyDopasowanychSlow);
         return new PrzetargResponse(
                 przetarg.getId(),
                 przetarg.getTytul(),
@@ -265,7 +290,7 @@ public class PrzetargService {
                 przetarg.getPunktacja(),
                 przetarg.getZrodlo() == null ? null : przetarg.getZrodlo().getId(),
                 przetarg.getZrodlo() == null ? null : przetarg.getZrodlo().getNazwa(),
-                przetarg.getDopasowaneSlowa().stream().map(SlowoKluczowe::getFraza).sorted().toList()
+                frazyDopasowanychSlow
         );
     }
 

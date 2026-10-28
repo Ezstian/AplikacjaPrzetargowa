@@ -31,6 +31,11 @@ public class ZrodloPrzetarguController {
         return service.aktualizuj(id, request);
     }
 
+    @PostMapping("/{id}/test")
+    public TestZrodlaResponse testuj(@PathVariable UUID id) {
+        return service.testuj(id);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> usun(@PathVariable UUID id) {
         service.usun(id);

@@ -1,6 +1,5 @@
 package com.example.przetargapp.przetarg;
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -9,11 +8,19 @@ import java.util.Locale;
 import java.util.UUID;
 
 @Service
-@RequiredArgsConstructor
 public class SilnikKlasyfikacjiPrzetargow {
     private final SlowoKluczoweRepository slowoKluczoweRepository;
     private final PrzetargRepository przetargRepository;
     private final PrzetargHistoriaStatusuRepository historiaRepository;
+
+    public SilnikKlasyfikacjiPrzetargow(
+            SlowoKluczoweRepository slowoKluczoweRepository,
+            PrzetargRepository przetargRepository,
+            PrzetargHistoriaStatusuRepository historiaRepository) {
+        this.slowoKluczoweRepository = slowoKluczoweRepository;
+        this.przetargRepository = przetargRepository;
+        this.historiaRepository = historiaRepository;
+    }
 
     public void klasyfikuj(Przetarg przetarg, String zmienilUzytkownik) {
         String tresc = (przetarg.getTytul() + "\n" + przetarg.getOpis()).toLowerCase(Locale.ROOT);
@@ -27,7 +34,10 @@ public class SilnikKlasyfikacjiPrzetargow {
                 .filter(slowo -> tresc.contains(slowo.getFraza().toLowerCase(Locale.ROOT)))
                 .toList();
 
-        int punkty = dopasowane.stream().mapToInt(SlowoKluczowe::getPunkty).sum();
+        int punkty = 0;
+        for (SlowoKluczowe slowo : dopasowane) {
+            punkty += slowo.getPunkty();
+        }
         przetarg.setPunktacja(punkty);
         przetarg.getDopasowaneSlowa().clear();
         przetarg.getDopasowaneSlowa().addAll(dopasowane);

@@ -22,6 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -47,6 +48,13 @@ class PrzetargAppApplicationTests {
 
 		mockMvc.perform(get("/api/users/admin"))
 				.andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/csrf"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.headerName").value("X-CSRF-TOKEN"));
+		mockMvc.perform(post("/api/users/login")
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{}"))
+				.andExpect(status().isForbidden());
 
 		MockHttpSession userSession = login(regularUser.getEmail());
 		mockMvc.perform(get("/api/users/admin").session(userSession))
@@ -63,21 +71,22 @@ class PrzetargAppApplicationTests {
 				.andExpect(jsonPath("$[0].email").value(target.getEmail()));
 
 		mockMvc.perform(put("/api/users/admin/{id}/rola", target.getId())
+						.with(csrf())
 						.session(adminSession)
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"rola\":\"ORGANIZER\"}"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.rola").value("ORGANIZER"));
 
-		mockMvc.perform(delete("/api/users/admin/{id}", target.getId()).session(adminSession))
+		mockMvc.perform(delete("/api/users/admin/{id}", target.getId()).with(csrf()).session(adminSession))
 				.andExpect(status().isNoContent());
 		mockMvc.perform(get("/api/users/{id}", target.getId()).session(adminSession))
 				.andExpect(status().isNotFound());
 
-		mockMvc.perform(delete("/api/users/admin/{id}", admin.getId()).session(adminSession))
+		mockMvc.perform(delete("/api/users/admin/{id}", admin.getId()).with(csrf()).session(adminSession))
 				.andExpect(status().isConflict());
 
-		mockMvc.perform(post("/api/users/logout").session(adminSession))
+		mockMvc.perform(post("/api/users/logout").with(csrf()).session(adminSession))
 				.andExpect(status().isNoContent());
 		mockMvc.perform(get("/api/users/admin").session(adminSession))
 				.andExpect(status().isUnauthorized());
@@ -86,6 +95,7 @@ class PrzetargAppApplicationTests {
 	@Test
 	void registrationReturnsActionableValidationAndDuplicateErrors() throws Exception {
 		mockMvc.perform(post("/api/users/rejestracja")
+						.with(csrf())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{}"))
 				.andExpect(status().isBadRequest())
@@ -104,11 +114,13 @@ class PrzetargAppApplicationTests {
 				""".formatted(uniquePhone(), email);
 
 		mockMvc.perform(post("/api/users/rejestracja")
+						.with(csrf())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(request))
 				.andExpect(status().isCreated());
 
 		mockMvc.perform(post("/api/users/rejestracja")
+						.with(csrf())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(request))
 				.andExpect(status().isConflict())
@@ -128,6 +140,7 @@ class PrzetargAppApplicationTests {
 		LocalDateTime deadline = LocalDateTime.now().plusDays(2).withNano(0);
 
 		String tenderResponse = mockMvc.perform(post("/api/przetargi")
+						.with(csrf())
 						.param("organizatorId", organizer)
 						.session(organizerSession)
 						.contentType(MediaType.APPLICATION_JSON)
@@ -150,6 +163,7 @@ class PrzetargAppApplicationTests {
 				.andExpect(jsonPath("$").isArray());
 
 		mockMvc.perform(post("/api/przetargi/{id}/oferty", tenderId)
+						.with(csrf())
 						.param("wykonawcaId", participant)
 						.session(participantSession)
 						.contentType(MediaType.APPLICATION_JSON)
@@ -163,6 +177,7 @@ class PrzetargAppApplicationTests {
 				.andExpect(jsonPath("$.tytulPrzetargu").value("Dostawa sprzętu"));
 
 		mockMvc.perform(post("/api/przetargi/{id}/oferty", tenderId)
+						.with(csrf())
 						.param("wykonawcaId", participant)
 						.session(participantSession)
 						.contentType(MediaType.APPLICATION_JSON)
@@ -179,6 +194,7 @@ class PrzetargAppApplicationTests {
 				.andExpect(jsonPath("$.length()").value(1));
 
 		mockMvc.perform(post("/api/przetargi/{id}/zamknij", tenderId)
+						.with(csrf())
 						.param("organizatorId", organizer)
 						.session(organizerSession))
 				.andExpect(status().isOk())
@@ -204,6 +220,7 @@ class PrzetargAppApplicationTests {
 						.header().string("Location", "/Logowanie.html"));
 
 		String sourceResponse = mockMvc.perform(post("/api/zrodla")
+						.with(csrf())
 						.session(adminSession)
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
@@ -211,7 +228,7 @@ class PrzetargAppApplicationTests {
 								  "nazwa": "BZP test",
 								  "adresEndpointu": "https://api.example.test/tenders",
 								  "metoda": "GET",
-								  "parametryJson": "{\\"pageSize\\":100}",
+								  "parametryJson": "{\\"itemsPath\\":\\"items\\",\\"query\\":{\\"pageSize\\":100},\\"fields\\":{\\"zewnetrzneId\\":\\"id\\",\\"tytul\\":\\"title\\",\\"opis\\":\\"description\\",\\"kategoria\\":\\"category\\",\\"lokalizacja\\":\\"location\\",\\"terminSkladaniaOfert\\":\\"deadline\\"}}",
 								  "aktywne": true
 								}
 								"""))
@@ -226,6 +243,7 @@ class PrzetargAppApplicationTests {
 				.andExpect(status().isUnauthorized());
 
 		mockMvc.perform(post("/api/slowa-kluczowe")
+						.with(csrf())
 						.session(adminSession)
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
@@ -233,6 +251,7 @@ class PrzetargAppApplicationTests {
 								"""))
 				.andExpect(status().isCreated());
 		mockMvc.perform(post("/api/slowa-kluczowe")
+						.with(csrf())
 						.session(adminSession)
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
@@ -270,6 +289,7 @@ class PrzetargAppApplicationTests {
 
 		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 						.patch("/api/przetargi/{id}/status", tenderId)
+						.with(csrf())
 						.session(regularSession)
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"status\":\"NOWY\"}"))
@@ -290,6 +310,7 @@ class PrzetargAppApplicationTests {
 
 		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 						.patch("/api/przetargi/{id}/status", tenderId)
+						.with(csrf())
 						.session(adminSession)
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"status\":\"ODRZUCONY\"}"))
@@ -335,6 +356,7 @@ class PrzetargAppApplicationTests {
 		MockHttpSession adminSession = login(admin.getEmail());
 		String email = "created-" + UUID.randomUUID() + "@example.com";
 		String response = mockMvc.perform(post("/api/users/admin")
+						.with(csrf())
 						.session(adminSession)
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
@@ -352,11 +374,13 @@ class PrzetargAppApplicationTests {
 		String userId = extractId(response);
 
 		mockMvc.perform(put("/api/users/admin/{id}/haslo", userId)
+						.with(csrf())
 						.session(adminSession)
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{\"haslo\":\"noweHaslo123\"}"))
 				.andExpect(status().isNoContent());
 		mockMvc.perform(post("/api/users/login")
+						.with(csrf())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{"email":"%s","haslo":"noweHaslo123"}
@@ -385,6 +409,7 @@ class PrzetargAppApplicationTests {
 
 	private MockHttpSession login(String email) throws Exception {
 		return (MockHttpSession) mockMvc.perform(post("/api/users/login")
+						.with(csrf())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{"email":"%s","haslo":"bezpieczne123"}
@@ -395,6 +420,7 @@ class PrzetargAppApplicationTests {
 
 	private String registerUser(String name, String email, String role) throws Exception {
 		String response = mockMvc.perform(post("/api/users/rejestracja")
+						.with(csrf())
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("""
 								{

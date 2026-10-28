@@ -1,4 +1,4 @@
-FROM maven:3.9-eclipse-temurin-21 AS build
+FROM maven:3.9-eclipse-temurin-25 AS build
 
 WORKDIR /app
 
@@ -9,7 +9,7 @@ RUN chmod +x mvnw && ./mvnw -B dependency:go-offline
 COPY src src
 RUN ./mvnw -B package
 
-FROM eclipse-temurin:21-jre-alpine AS runtime
+FROM eclipse-temurin:25-jre-alpine AS runtime
 
 WORKDIR /app
 

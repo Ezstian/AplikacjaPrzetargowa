@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.security.core.Authentication;
-@CrossOrigin(origins = "*")
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
