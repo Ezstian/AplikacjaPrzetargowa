@@ -24,58 +24,10 @@
         <section>
             <p class="text-xs font-bold uppercase tracking-widest text-cyan-400">Administracja</p>
             <h1 class="mt-2 text-3xl font-black text-white">Panel administracyjny</h1>
-            <p class="mt-2 text-sm text-slate-400">Zarządzaj źródłami, regułami klasyfikacji i statystykami przetargów.</p>
+            <p class="mt-2 text-sm text-slate-400">Zarządzaj regułami klasyfikacji i statystykami przetargów.</p>
         </section>
 
         <div id="pageMessage" class="hidden rounded-lg p-4 text-sm" role="status" aria-live="polite"></div>
-
-        <section class="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
-            <h2 class="text-xl font-bold">Źródła i endpointy pobierania</h2>
-            <p class="mt-1 text-sm text-slate-400">Dodaj publiczne API JSON, skonfiguruj mapowanie pól i sprawdź połączenie.</p>
-            <form id="sourceForm" class="mt-5 grid gap-4 md:grid-cols-2">
-                <input name="id" type="hidden">
-                <label class="text-sm text-slate-300">Nazwa
-                    <input name="nazwa" required maxlength="120" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
-                </label>
-                <label class="text-sm text-slate-300">Adres API (HTTP/HTTPS)
-                    <input name="adresEndpointu" type="url" required maxlength="2048" placeholder="https://api.example.pl/tenders" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
-                </label>
-                <label class="text-sm text-slate-300">Metoda
-                    <select name="metoda" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-white">
-                        <option value="GET">GET</option><option value="POST">POST</option>
-                    </select>
-                </label>
-                <label class="flex items-center gap-2 self-end pb-2 text-sm text-slate-300">
-                    <input name="aktywne" type="checkbox" checked class="accent-cyan-400"> Źródło aktywne
-                </label>
-                <label class="text-sm text-slate-300 md:col-span-2">Konfiguracja JSON (query, headers, body, itemsPath, fields)
-                    <textarea name="parametryJson" rows="12" required class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-white">{
-  "itemsPath": "items",
-  "query": {},
-  "headers": {},
-  "fields": {
-    "zewnetrzneId": "id",
-    "tytul": "title",
-    "opis": "description",
-    "kategoria": "category",
-    "lokalizacja": "location",
-    "terminSkladaniaOfert": "deadline",
-    "adresZrodla": "url"
-  }
-}</textarea>
-                </label>
-                <div class="flex flex-wrap gap-2 md:col-span-2">
-                    <button class="rounded-lg bg-cyan-400 px-5 py-2.5 font-bold text-slate-950">Zapisz źródło</button>
-                    <button id="cancelSourceEdit" type="button" class="rounded-lg border border-slate-700 px-4 py-2">Wyczyść formularz</button>
-                </div>
-            </form>
-            <div class="mt-6 overflow-x-auto">
-                <table class="w-full min-w-[760px] text-left text-sm">
-                    <thead class="border-b border-slate-800 text-xs uppercase text-slate-400"><tr><th class="px-3 py-3">Źródło</th><th class="px-3 py-3">Metoda</th><th class="px-3 py-3">Stan</th><th class="px-3 py-3">Akcje</th></tr></thead>
-                    <tbody id="sources" class="divide-y divide-slate-800"></tbody>
-                </table>
-            </div>
-        </section>
 
         <section class="rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
             <h2 class="text-xl font-bold">Słowa kluczowe i reguły</h2>
@@ -191,59 +143,6 @@
                 return element;
             }
 
-            async function loadSources() {
-                const sources = await api('/api/zrodla');
-                const container = document.getElementById('sources');
-                container.replaceChildren();
-                if (!sources.length) {
-                    const row = document.createElement('tr');
-                    const cell = textCell(row, 'Brak skonfigurowanych źródeł.', 'text-slate-400');
-                    cell.colSpan = 4;
-                    container.append(row);
-                    return;
-                }
-                sources.forEach(source => {
-                    const row = document.createElement('tr');
-                    textCell(row, `${source.nazwa}\n${source.adresEndpointu}`, 'whitespace-pre-line break-all');
-                    textCell(row, source.metoda);
-                    textCell(row, source.aktywne ? 'Aktywne' : 'Nieaktywne');
-                    const actions = document.createElement('td');
-                    actions.className = 'flex flex-wrap gap-2 px-3 py-3';
-                    actions.append(
-                        button('Testuj', 'rounded border border-cyan-800 px-2 py-1 text-cyan-300 hover:border-cyan-400', async () => {
-                            try {
-                                const result = await api(`/api/zrodla/${encodeURIComponent(source.id)}/test`, { method: 'POST' });
-                                showMessage(`${source.nazwa}: ${result.komunikat} HTTP ${result.kodHttp}; ogłoszenia: ${result.liczbaOgloszen}.`, true);
-                            } catch (error) {
-                                showMessage(`${source.nazwa}: ${error.message}`);
-                            }
-                        }),
-                        button('Edytuj', 'rounded border border-slate-700 px-2 py-1 hover:border-cyan-400', () => {
-                            const form = document.getElementById('sourceForm');
-                            form.elements.namedItem('id').value = source.id;
-                            form.elements.namedItem('nazwa').value = source.nazwa;
-                            form.elements.namedItem('adresEndpointu').value = source.adresEndpointu;
-                            form.elements.namedItem('metoda').value = source.metoda;
-                            form.elements.namedItem('aktywne').checked = source.aktywne;
-                            form.elements.namedItem('parametryJson').value = source.parametryJson || '{}';
-                            form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }),
-                        button('Usuń', 'rounded border border-rose-900 px-2 py-1 text-rose-300 hover:bg-rose-950', async () => {
-                            if (!window.confirm(`Usunąć źródło „${source.nazwa}”?`)) return;
-                            try {
-                                await api(`/api/zrodla/${encodeURIComponent(source.id)}`, { method: 'DELETE' });
-                                showMessage('Źródło zostało usunięte.', true);
-                                await loadSources();
-                            } catch (error) {
-                                showMessage(error.message);
-                            }
-                        })
-                    );
-                    row.append(actions);
-                    container.append(row);
-                });
-            }
-
             async function loadKeywords() {
                 const keywords = await api('/api/slowa-kluczowe');
                 const container = document.getElementById('keywords');
@@ -329,34 +228,6 @@
                 });
             }
 
-            document.getElementById('sourceForm').addEventListener('submit', async event => {
-                event.preventDefault();
-                const form = event.currentTarget;
-                const data = Object.fromEntries(new FormData(form).entries());
-                const id = data.id;
-                data.aktywne = form.elements.namedItem('aktywne').checked;
-                delete data.id;
-                try {
-                    await api(id ? `/api/zrodla/${encodeURIComponent(id)}` : '/api/zrodla', {
-                        method: id ? 'PUT' : 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(data)
-                    });
-                    form.reset();
-                    form.elements.namedItem('id').value = '';
-                    showMessage(id ? 'Źródło zostało zaktualizowane.' : 'Źródło zostało dodane.', true);
-                    await loadSources();
-                } catch (error) {
-                    showMessage(error.message);
-                }
-            });
-
-            document.getElementById('cancelSourceEdit').addEventListener('click', () => {
-                const form = document.getElementById('sourceForm');
-                form.reset();
-                form.elements.namedItem('id').value = '';
-            });
-
             document.getElementById('keywordForm').addEventListener('submit', async event => {
                 event.preventDefault();
                 const form = event.currentTarget;
@@ -406,7 +277,7 @@
                 }
             });
 
-            Promise.all([loadSources(), loadKeywords(), loadAnalytics()])
+            Promise.all([loadKeywords(), loadAnalytics()])
                 .catch(error => showMessage(error.message));
         })();
     </script>

@@ -10,9 +10,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @Entity
-@Table(name = "przetargi", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_przetarg_zrodlo_zewnetrzne", columnNames = {"zrodlo_id", "zewnetrzne_id"})
-})
+@Table(name = "tenders")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -23,63 +21,56 @@ public class Przetarg {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, length = 160)
+    @Column(name = "title", nullable = false, length = 160)
     private String tytul;
 
-    @Column(nullable = false, columnDefinition = "TEXT")
+    @Column(name = "description", nullable = false, columnDefinition = "TEXT")
     private String opis;
 
-    @Column(nullable = false, length = 100)
+    @Column(name = "category", nullable = false, length = 100)
     private String kategoria;
 
-    @Column(nullable = false, length = 160)
+    @Column(name = "location", nullable = false, length = 160)
     private String lokalizacja;
 
-    @Column(nullable = false)
+    @Column(name = "submission_deadline", nullable = false)
     private LocalDateTime terminSkladaniaOfert;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 20)
     @Builder.Default
     private StatusPrzetargu status = StatusPrzetargu.OTWARTY;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 24)
+    @Column(name = "operational_status", length = 24)
     @Builder.Default
     private StatusOperacyjny statusOperacyjny = StatusOperacyjny.NOWY;
 
-    @Column
+    @Column(name = "score")
     @Builder.Default
     private int punktacja = 0;
 
-    @Column
+    @Column(name = "status_manually_set")
     @Builder.Default
     private boolean statusUstawionyRecznie = false;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "zrodlo_id")
-    private ZrodloPrzetargu zrodlo;
-
-    @Column(name = "zewnetrzne_id", length = 200)
-    private String zewnetrzneId;
-
-    @Column(length = 2048)
+    @Column(name = "source_url", length = 2048)
     private String adresZrodla;
 
     @ManyToMany
     @JoinTable(
-            name = "przetargi_dopasowane_slowa",
-            joinColumns = @JoinColumn(name = "przetarg_id"),
-            inverseJoinColumns = @JoinColumn(name = "slowo_kluczowe_id")
+            name = "tender_matched_keywords",
+            joinColumns = @JoinColumn(name = "tender_id"),
+            inverseJoinColumns = @JoinColumn(name = "keyword_id")
     )
     @Builder.Default
     private Set<SlowoKluczowe> dopasowaneSlowa = new HashSet<>();
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "organizator_id")
+    @JoinColumn(name = "organizer_id")
     private User organizator;
 
-    @Column(nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime dataUtworzenia;
 
     @PrePersist

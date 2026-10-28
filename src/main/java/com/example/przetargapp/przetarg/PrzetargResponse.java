@@ -18,8 +18,6 @@ public record PrzetargResponse(
         long liczbaOfert,
         StatusOperacyjny statusOperacyjny,
         int punktacja,
-        UUID zrodloId,
-        String zrodlo,
         List<String> dopasowaneSlowa
 ) {
 }

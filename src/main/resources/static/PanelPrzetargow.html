@@ -91,11 +91,6 @@
                 <label class="text-xs text-slate-400">Maks. punktacja
                     <input name="maxPunktacja" type="number" min="0" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
                 </label>
-                <label class="text-xs text-slate-400">Źródło
-                    <select name="zrodloId" id="sourceFilter" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
-                        <option value="">Wszystkie źródła</option>
-                    </select>
-                </label>
                 <label class="text-xs text-slate-400">Dopasowane słowo kluczowe
                     <select name="slowoId" id="keywordFilter" class="mt-1 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
                         <option value="">Wszystkie słowa</option>
@@ -286,7 +281,6 @@
                 createText('span', '', `Termin: ${dateFormatter.format(new Date(tender.terminSkladaniaOfert))}`),
                 createText('span', '', `Oferty: ${tender.liczbaOfert}`),
                 createText('span', '', `Punktacja: ${tender.punktacja}`),
-                createText('span', '', `Źródło: ${tender.zrodlo || 'Dodany ręcznie'}`),
                 createText('span', '', `Słowa kluczowe: ${tender.dopasowaneSlowa?.join(', ') || 'Brak dopasowań'}`)
             );
             card.append(meta);
@@ -369,7 +363,6 @@
                 createText('p', '', `Lokalizacja: ${tender.lokalizacja}`),
                 createText('p', '', `Organizator: ${tender.organizator}`),
                 createText('p', '', `Termin: ${dateFormatter.format(new Date(tender.terminSkladaniaOfert))}`),
-                createText('p', '', `Źródło: ${tender.zrodlo || 'Dodany ręcznie'}`),
                 createText('p', '', `Słowa: ${tender.dopasowaneSlowa?.join(', ') || 'Brak dopasowań'}`),
                 createText('p', '', `Złożone oferty: ${tender.liczbaOfert}`)
             );
@@ -480,11 +473,8 @@
 
         async function loadFilterOptions() {
             const options = await api('/api/przetargi/filtry');
-            const sources = document.getElementById('sourceFilter');
             const keywords = document.getElementById('keywordFilter');
-            sources.replaceChildren(new Option('Wszystkie źródła', ''));
             keywords.replaceChildren(new Option('Wszystkie słowa', ''));
-            options.zrodla.forEach(source => sources.add(new Option(source.nazwa, source.id)));
             options.slowa.forEach(keyword => {
                 keywords.add(new Option(`${keyword.fraza} (${keyword.typ === 'POSZUKIWANE' ? 'poszukiwane' : 'wykluczające'})`, keyword.id));
             });

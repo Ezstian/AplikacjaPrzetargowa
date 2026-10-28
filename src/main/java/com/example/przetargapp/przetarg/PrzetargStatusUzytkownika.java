@@ -19,8 +19,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "statusy_przetargow_uzytkownikow", uniqueConstraints = @UniqueConstraint(
-        name = "uk_status_przetargu_uzytkownika", columnNames = {"przetarg_id", "uzytkownik_id"}))
+@Table(name = "user_tender_statuses", uniqueConstraints = @UniqueConstraint(
+        name = "uk_user_tender_statuses_tender_user", columnNames = {"tender_id", "user_id"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -31,17 +31,17 @@ public class PrzetargStatusUzytkownika {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "przetarg_id", nullable = false)
+    @Column(name = "tender_id", nullable = false)
     private UUID przetargId;
 
-    @Column(name = "uzytkownik_id", nullable = false)
+    @Column(name = "user_id", nullable = false)
     private UUID uzytkownikId;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 24)
+    @Column(name = "status", nullable = false, length = 24)
     private StatusOperacyjny status;
 
-    @Column(nullable = false)
+    @Column(name = "changed_at", nullable = false)
     private LocalDateTime dataZmiany;
 
     @jakarta.persistence.PrePersist

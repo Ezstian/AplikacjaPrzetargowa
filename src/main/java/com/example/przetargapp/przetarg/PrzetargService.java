@@ -13,7 +13,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Optional;
 import java.util.UUID;
 import jakarta.persistence.criteria.JoinType;
 import jakarta.persistence.criteria.Predicate;
@@ -23,37 +22,31 @@ public class PrzetargService {
     private final PrzetargRepository przetargRepository;
     private final OfertaRepository ofertaRepository;
     private final UserRepository userRepository;
-    private final ZrodloPrzetarguRepository zrodloRepository;
     private final SlowoKluczoweRepository slowoKluczoweRepository;
     private final SilnikKlasyfikacjiPrzetargow silnikKlasyfikacji;
     private final PrzetargHistoriaStatusuRepository historiaRepository;
     private final PrzetargStatusUzytkownikaRepository statusUzytkownikaRepository;
-    private final PowiadomieniaPrzetargowService powiadomieniaService;
 
     public PrzetargService(
             PrzetargRepository przetargRepository,
             OfertaRepository ofertaRepository,
             UserRepository userRepository,
-            ZrodloPrzetarguRepository zrodloRepository,
             SlowoKluczoweRepository slowoKluczoweRepository,
             SilnikKlasyfikacjiPrzetargow silnikKlasyfikacji,
             PrzetargHistoriaStatusuRepository historiaRepository,
-            PrzetargStatusUzytkownikaRepository statusUzytkownikaRepository,
-            PowiadomieniaPrzetargowService powiadomieniaService) {
+            PrzetargStatusUzytkownikaRepository statusUzytkownikaRepository) {
         this.przetargRepository = przetargRepository;
         this.ofertaRepository = ofertaRepository;
         this.userRepository = userRepository;
-        this.zrodloRepository = zrodloRepository;
         this.slowoKluczoweRepository = slowoKluczoweRepository;
         this.silnikKlasyfikacji = silnikKlasyfikacji;
         this.historiaRepository = historiaRepository;
         this.statusUzytkownikaRepository = statusUzytkownikaRepository;
-        this.powiadomieniaService = powiadomieniaService;
     }
 
     @Transactional(readOnly = true)
     public List<PrzetargResponse> listaPrzetargow() {
-        return listaPrzetargow(null, null, null, null, null, null, null, null, null);
+        return listaPrzetargow(null, null, null, null, null, null, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -63,7 +56,6 @@ public class PrzetargService {
             LocalDateTime doDaty,
             Integer minPunktacja,
             Integer maxPunktacja,
-            UUID zrodloId,
             UUID slowoId,
             String query,
             UUID uzytkownikId) {
@@ -89,9 +81,6 @@ public class PrzetargService {
             }
             if (maxPunktacja != null) {
                 predicates.add(criteriaBuilder.lessThanOrEqualTo(root.get("punktacja"), maxPunktacja));
-            }
-            if (zrodloId != null) {
-                predicates.add(criteriaBuilder.equal(root.get("zrodlo").get("id"), zrodloId));
             }
             if (slowoId != null) {
                 var slowa = root.join("dopasowaneSlowa", JoinType.INNER);
@@ -126,16 +115,12 @@ public class PrzetargService {
 
     @Transactional(readOnly = true)
     public OpcjeFiltrowPrzetarguResponse opcjeFiltrowPrzetargu() {
-        List<OpcjeFiltrowPrzetarguResponse.OpcjaZrodla> zrodla = zrodloRepository
-                .findAllByAktywneTrueOrderByNazwaAsc().stream()
-                .map(zrodlo -> new OpcjeFiltrowPrzetarguResponse.OpcjaZrodla(zrodlo.getId(), zrodlo.getNazwa()))
-                .toList();
         List<OpcjeFiltrowPrzetarguResponse.OpcjaSlowa> slowa = slowoKluczoweRepository.findAllByAktywneTrue().stream()
                 .filter(slowo -> slowo.getTyp() == TypSlowaKluczowego.POSZUKIWANE)
                 .map(slowo -> new OpcjeFiltrowPrzetarguResponse.OpcjaSlowa(
                         slowo.getId(), slowo.getFraza(), slowo.getTyp()))
                 .toList();
-        return new OpcjeFiltrowPrzetarguResponse(zrodla, slowa);
+        return new OpcjeFiltrowPrzetarguResponse(slowa);
     }
 
     @Transactional(readOnly = true)
@@ -205,39 +190,6 @@ public class PrzetargService {
         statusUzytkownikaRepository.save(statusUzytkownika);
         silnikKlasyfikacji.zapiszZmianeStatusuUzytkownika(przetarg, poprzedniStatus, status, requesterId);
         return mapToResponse(przetarg, status);
-    }
-
-    @Transactional
-    public WynikImportuResponse importuj(ImportPrzetarguRequest request) {
-        ZrodloPrzetargu zrodlo = zrodloRepository.findById(request.zrodloId())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Nie znaleziono źródła"));
-        if (!zrodlo.isAktywne()) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Źródło jest nieaktywne");
-        }
-
-        Optional<Przetarg> existingPrzetarg = przetargRepository
-                .findByZrodloIdAndZewnetrzneId(request.zrodloId(), request.zewnetrzneId().trim());
-        boolean nowy;
-        Przetarg przetarg;
-        if (existingPrzetarg.isPresent()) {
-            nowy = false;
-            przetarg = existingPrzetarg.get();
-        } else {
-            nowy = true;
-            przetarg = Przetarg.builder().zrodlo(zrodlo).zewnetrzneId(request.zewnetrzneId().trim()).build();
-        }
-        przetarg.setTytul(request.tytul().trim());
-        przetarg.setOpis(request.opis().trim());
-        przetarg.setKategoria(request.kategoria().trim());
-        przetarg.setLokalizacja(request.lokalizacja().trim());
-        przetarg.setTerminSkladaniaOfert(request.terminSkladaniaOfert());
-        przetarg.setAdresZrodla(request.adresZrodla() == null ? null : request.adresZrodla().trim());
-        przetarg = przetargRepository.save(przetarg);
-        silnikKlasyfikacji.klasyfikuj(przetarg, silnikKlasyfikacji.uzytkownikSystemowy());
-        przetarg = przetargRepository.save(przetarg);
-        powiadomieniaService.dodajNowyInteresujacy(przetarg, nowy);
-        return new WynikImportuResponse(
-                przetarg.getId(), nowy, przetarg.getStatusOperacyjny(), przetarg.getPunktacja());
     }
 
     @Transactional
@@ -336,13 +288,11 @@ public class PrzetargService {
                 przetarg.getDataUtworzenia(),
                 przetarg.getOrganizator() == null ? null : przetarg.getOrganizator().getId(),
                 przetarg.getOrganizator() == null
-                        ? "Źródło: " + (przetarg.getZrodlo() == null ? "zewnętrzne" : przetarg.getZrodlo().getNazwa())
+                        ? "Ogłoszenie zewnętrzne"
                         : przetarg.getOrganizator().getImie() + " " + przetarg.getOrganizator().getNazwisko(),
                 ofertaRepository.countByPrzetargId(przetarg.getId()),
                 statusOperacyjny,
                 przetarg.getPunktacja(),
-                przetarg.getZrodlo() == null ? null : przetarg.getZrodlo().getId(),
-                przetarg.getZrodlo() == null ? null : przetarg.getZrodlo().getNazwa(),
                 frazyDopasowanychSlow
         );
     }

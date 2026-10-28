@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,9 @@ import org.springframework.security.core.Authentication;
 @RequiredArgsConstructor
 public class UserController {
     private final UserService userService;
+
+    @Value("${app.admin.email:}")
+    private String emailAdministratora;
 
     @PostMapping("/rejestracja")
     public ResponseEntity<UserResponse> zarejestruj(@Valid @RequestBody RejestrowanieUseraDTO request) {
@@ -59,6 +63,11 @@ public class UserController {
         }
         httpRequest.getSession(true).setAttribute("userId", user.id());
         return ResponseEntity.ok(user);
+    }
+
+    @GetMapping("/recovery-contact")
+    public ResponseEntity<Map<String, String>> pobierzKontaktOdzyskiwania() {
+        return ResponseEntity.ok(Map.of("email", emailAdministratora == null ? "" : emailAdministratora.trim()));
     }
 
     @PostMapping("/logout")

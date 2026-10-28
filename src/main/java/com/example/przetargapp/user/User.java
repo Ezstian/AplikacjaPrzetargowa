@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "uzytkownicy")
+@Table(name = "users")
 @Getter
 @Setter
 @AllArgsConstructor
@@ -20,29 +20,29 @@ public class User {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false)
+    @Column(name = "first_name", nullable = false)
     private String imie;
 
-    @Column(nullable = false)
+    @Column(name = "last_name", nullable = false)
     private String nazwisko;
 
     @Enumerated(EnumType.STRING)
     @Builder.Default
-    @Column(nullable = false)
+    @Column(name = "role", nullable = false)
     private Rola rola = Rola.USER;
 
     @Size(min = 9, max = 9)
-    @Column(nullable = false, unique = true)
+    @Column(name = "phone", nullable = false, unique = true)
     private String telefon;
 
     @Email
-    @Column(nullable = false, unique = true)
+    @Column(name = "email", nullable = false, unique = true)
     private String email;
 
-    @Column(nullable = false)
+    @Column(name = "password_hash", nullable = false)
     private String haslo;
 
-    @Column(name = "data_utworzenia",updatable = false)
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime dataUtworzenia;
 
     @PrePersist

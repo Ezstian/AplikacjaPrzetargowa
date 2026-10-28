@@ -50,8 +50,7 @@ public class ZabezpieczeniaConfig {
         http
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(csrfTokenRepository())
-                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers("/api/internal/**"))
+                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler()))
                 .sessionManagement(session -> session.sessionFixation(fixation -> fixation.migrateSession()))
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(
                         (request, response, exception) -> {
@@ -63,13 +62,12 @@ public class ZabezpieczeniaConfig {
                         }))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.GET, "/api/csrf").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/users/recovery-contact").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/users/rejestracja", "/api/users/login").permitAll()
-                        .requestMatchers("/api/internal/**").permitAll()
                         .requestMatchers(
                                 "/PanelAdministratora.html",
                                 "/UzytkownicyAdministratora.html",
                                 "/api/users/admin/**",
-                                "/api/zrodla/**",
                                 "/api/slowa-kluczowe/**",
                                 "/api/analytics/**"
                         ).hasRole("ADMIN")

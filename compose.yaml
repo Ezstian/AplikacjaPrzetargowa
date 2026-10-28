@@ -35,26 +35,9 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL in .env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env}
       ADMIN_PHONE: ${ADMIN_PHONE:?Set ADMIN_PHONE in .env}
-      INGESTION_API_KEY: ${INGESTION_API_KEY:?Set INGESTION_API_KEY in .env}
-      SOURCE_API_TOKEN: ${SOURCE_API_TOKEN:-}
-      TENDER_NOTIFICATION_WEBHOOK_URL: ${TENDER_NOTIFICATION_WEBHOOK_URL:-}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
     ports:
       - "127.0.0.1:${APP_PORT:-8080}:8080"
-    restart: unless-stopped
-
-  ingestion:
-    build:
-      context: ./ingestion
-      dockerfile: Dockerfile
-    depends_on:
-      app:
-        condition: service_started
-    environment:
-      JAVA_API_URL: http://app:8080
-      INGESTION_API_KEY: ${INGESTION_API_KEY:?Set INGESTION_API_KEY in .env}
-      SOURCE_API_TOKEN: ${SOURCE_API_TOKEN:-}
-      INGESTION_INTERVAL_SECONDS: ${INGESTION_INTERVAL_SECONDS:-3600}
     restart: unless-stopped
 
 volumes:

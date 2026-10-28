@@ -9,8 +9,8 @@ import java.util.Set;
 import java.util.UUID;
 
 @Entity
-@Table(name = "slowa_kluczowe", uniqueConstraints = @UniqueConstraint(
-        name = "uk_slowa_kluczowe_fraza_typ", columnNames = {"fraza", "typ"}))
+@Table(name = "keywords", uniqueConstraints = @UniqueConstraint(
+        name = "uk_keywords_phrase_type", columnNames = {"phrase", "keyword_type"}))
 @Getter
 @Setter
 @NoArgsConstructor
@@ -21,25 +21,25 @@ public class SlowoKluczowe {
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(nullable = false, length = 200)
+    @Column(name = "phrase", nullable = false, length = 200)
     private String fraza;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 24)
+    @Column(name = "keyword_type", nullable = false, length = 24)
     private TypSlowaKluczowego typ;
 
-    @Column(length = 100)
+    @Column(name = "category", length = 100)
     private String kategoria;
 
-    @Column(nullable = false)
+    @Column(name = "score", nullable = false)
     @Builder.Default
     private int punkty = 1;
 
-    @Column(nullable = false)
+    @Column(name = "active", nullable = false)
     @Builder.Default
     private boolean aktywne = true;
 
-    @Column(nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime dataUtworzenia;
 
     @ManyToMany(mappedBy = "dopasowaneSlowa")

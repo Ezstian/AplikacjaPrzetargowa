@@ -1,45 +1,45 @@
-ALTER TABLE historia_statusow_przetargow
-    ADD COLUMN uzytkownik_id UUID;
+ALTER TABLE tender_status_history
+    ADD COLUMN user_id UUID;
 
-ALTER TABLE historia_statusow_przetargow
-    ADD CONSTRAINT fk_historia_statusow_uzytkownik
-    FOREIGN KEY (uzytkownik_id) REFERENCES uzytkownicy (id) ON DELETE CASCADE;
+ALTER TABLE tender_status_history
+    ADD CONSTRAINT fk_tender_status_history_user
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE;
 
-CREATE TABLE statusy_przetargow_uzytkownikow (
+CREATE TABLE user_tender_statuses (
     id UUID PRIMARY KEY,
-    przetarg_id UUID NOT NULL,
-    uzytkownik_id UUID NOT NULL,
+    tender_id UUID NOT NULL,
+    user_id UUID NOT NULL,
     status VARCHAR(24) NOT NULL,
-    data_zmiany TIMESTAMP WITHOUT TIME ZONE NOT NULL,
-    CONSTRAINT uk_status_przetargu_uzytkownika UNIQUE (przetarg_id, uzytkownik_id),
-    CONSTRAINT fk_status_przetargu_uzytkownika_przetarg
-        FOREIGN KEY (przetarg_id) REFERENCES przetargi (id) ON DELETE CASCADE,
-    CONSTRAINT fk_status_przetargu_uzytkownika_user
-        FOREIGN KEY (uzytkownik_id) REFERENCES uzytkownicy (id) ON DELETE CASCADE
+    changed_at TIMESTAMP WITHOUT TIME ZONE NOT NULL,
+    CONSTRAINT uk_user_tender_statuses_tender_user UNIQUE (tender_id, user_id),
+    CONSTRAINT fk_user_tender_statuses_tender
+        FOREIGN KEY (tender_id) REFERENCES tenders (id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_tender_statuses_user
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
-CREATE INDEX idx_statusy_przetargow_uzytkownik_user
-    ON statusy_przetargow_uzytkownikow (uzytkownik_id);
+CREATE INDEX idx_user_tender_statuses_user_id
+    ON user_tender_statuses (user_id);
 
-WITH ostatnie_statusy_uzytkownikow AS (
-    SELECT DISTINCT ON (historia.przetarg_id, historia.zmienil_uzytkownik)
-        historia.id,
-        historia.przetarg_id,
-        uzytkownik.id AS uzytkownik_id,
-        historia.nowy_status,
-        historia.data_zmiany
-    FROM historia_statusow_przetargow historia
-    JOIN uzytkownicy uzytkownik ON uzytkownik.id::text = historia.zmienil_uzytkownik
-    ORDER BY historia.przetarg_id, historia.zmienil_uzytkownik, historia.data_zmiany DESC
+WITH latest_user_statuses AS (
+    SELECT DISTINCT ON (history.tender_id, history.changed_by)
+        history.id,
+        history.tender_id,
+        users.id AS user_id,
+        history.new_status,
+        history.changed_at
+    FROM tender_status_history history
+    JOIN users ON users.id::text = history.changed_by
+    ORDER BY history.tender_id, history.changed_by, history.changed_at DESC
 )
-INSERT INTO statusy_przetargow_uzytkownikow (id, przetarg_id, uzytkownik_id, status, data_zmiany)
-SELECT id, przetarg_id, uzytkownik_id, nowy_status, data_zmiany
-FROM ostatnie_statusy_uzytkownikow;
+INSERT INTO user_tender_statuses (id, tender_id, user_id, status, changed_at)
+SELECT id, tender_id, user_id, new_status, changed_at
+FROM latest_user_statuses;
 
-UPDATE historia_statusow_przetargow historia
-SET uzytkownik_id = uzytkownik.id
-FROM uzytkownicy uzytkownik
-WHERE uzytkownik.id::text = historia.zmienil_uzytkownik;
+UPDATE tender_status_history history
+SET user_id = users.id
+FROM users
+WHERE users.id::text = history.changed_by;
 
-UPDATE przetargi
-SET status_ustawiony_recznie = false;
+UPDATE tenders
+SET status_manually_set = false;

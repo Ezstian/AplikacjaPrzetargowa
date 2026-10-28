@@ -80,12 +80,12 @@ public class UserService {
     @Transactional
     public UserResponse zmienRole(UUID requesterId, UUID userId, Rola rola) {
         requireAdmin(requesterId);
-        if (rola == null || rola == Rola.ADMIN) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Nie można nadać roli administratora w panelu");
+        if (rola == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rola jest wymagana");
         }
         User user = findUser(userId);
         if (user.getRola() == Rola.ADMIN) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT, "Nie można zmienić roli administratora");
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Nie można zmienić roli istniejącego administratora");
         }
         user.setRola(rola);
         return mapToResponse(userRepository.save(user));
@@ -94,8 +94,8 @@ public class UserService {
     @Transactional
     public UserResponse utworzPrzezAdministratora(UUID requesterId, AdminCreateUserRequest request) {
         requireAdmin(requesterId);
-        if (request.rola() == null || request.rola() == Rola.ADMIN) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Administrator może utworzyć konto użytkownika lub organizatora");
+        if (request.rola() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rola jest wymagana");
         }
         String email = request.email().trim().toLowerCase(java.util.Locale.ROOT);
         String telefon = request.telefon().trim();

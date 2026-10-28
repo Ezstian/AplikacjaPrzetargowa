@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "historia_statusow_przetargow")
+@Table(name = "tender_status_history")
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
@@ -18,24 +18,24 @@ public class PrzetargHistoriaStatusu {
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "przetarg_id", nullable = false)
+    @JoinColumn(name = "tender_id", nullable = false)
     private Przetarg przetarg;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 24)
+    @Column(name = "previous_status", length = 24)
     private StatusOperacyjny poprzedniStatus;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 24)
+    @Column(name = "new_status", nullable = false, length = 24)
     private StatusOperacyjny nowyStatus;
 
-    @Column(length = 160)
+    @Column(name = "changed_by", length = 160)
     private String zmienilUzytkownik;
 
-    @Column(name = "uzytkownik_id")
+    @Column(name = "user_id")
     private UUID uzytkownikId;
 
-    @Column(nullable = false, updatable = false)
+    @Column(name = "changed_at", nullable = false, updatable = false)
     private LocalDateTime dataZmiany;
 
     @PrePersist

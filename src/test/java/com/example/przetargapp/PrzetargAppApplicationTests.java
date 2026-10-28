@@ -51,6 +51,9 @@ class PrzetargAppApplicationTests {
 		mockMvc.perform(get("/api/csrf"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.headerName").value("X-CSRF-TOKEN"));
+		mockMvc.perform(get("/api/users/recovery-contact"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.email").exists());
 		mockMvc.perform(post("/api/users/login")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content("{}"))
@@ -208,16 +211,12 @@ class PrzetargAppApplicationTests {
 	}
 
 	@Test
-	void adminCanConfigureRulesImportDeduplicateAndManuallyReclassifyTenders() throws Exception {
+	void adminCanConfigureRulesAndClassifyTendersWithPerUserStatuses() throws Exception {
 		User admin = createUser("Admin", "rules-" + UUID.randomUUID() + "@example.com", Rola.ADMIN);
 		MockHttpSession adminSession = login(admin.getEmail());
 		User regularUser = createUser("User", "regular-" + UUID.randomUUID() + "@example.com", Rola.USER);
 		MockHttpSession regularSession = login(regularUser.getEmail());
 
-		mockMvc.perform(get("/api/zrodla"))
-				.andExpect(status().isUnauthorized());
-		mockMvc.perform(get("/api/zrodla").session(regularSession))
-				.andExpect(status().isForbidden());
 		mockMvc.perform(get("/PanelAdministratora.html").session(regularSession))
 				.andExpect(status().isForbidden());
 		mockMvc.perform(get("/UzytkownicyAdministratora.html").session(regularSession))
@@ -233,30 +232,9 @@ class PrzetargAppApplicationTests {
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
 						.string(org.hamcrest.Matchers.containsString("id=\"interestingTendersSection\"")))
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
-						.string(org.hamcrest.Matchers.containsString("statusSelect.addEventListener('change'")));
-
-		String sourceResponse = mockMvc.perform(post("/api/zrodla")
-						.with(csrf())
-						.session(adminSession)
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("""
-								{
-								  "nazwa": "BZP test",
-								  "adresEndpointu": "https://api.example.test/tenders",
-								  "metoda": "GET",
-								  "parametryJson": "{\\"itemsPath\\":\\"items\\",\\"query\\":{\\"pageSize\\":100},\\"fields\\":{\\"zewnetrzneId\\":\\"id\\",\\"tytul\\":\\"title\\",\\"opis\\":\\"description\\",\\"kategoria\\":\\"category\\",\\"lokalizacja\\":\\"location\\",\\"terminSkladaniaOfert\\":\\"deadline\\"}}",
-								  "aktywne": true
-								}
-								"""))
-				.andExpect(status().isCreated())
-				.andReturn().getResponse().getContentAsString();
-		String sourceId = extractId(sourceResponse);
-		mockMvc.perform(get("/api/internal/sources")
-						.header("X-Ingestion-Key", "test-ingestion-key"))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.length()").value(1));
-		mockMvc.perform(get("/api/internal/sources"))
-				.andExpect(status().isUnauthorized());
+						.string(org.hamcrest.Matchers.containsString("statusSelect.addEventListener('change'")))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("sourceFilter"))));
 
 		mockMvc.perform(post("/api/slowa-kluczowe")
 						.with(csrf())
@@ -276,32 +254,46 @@ class PrzetargAppApplicationTests {
 				.andExpect(status().isCreated());
 		mockMvc.perform(get("/api/przetargi/filtry").session(regularSession))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.zrodla.length()").value(1))
 				.andExpect(jsonPath("$.slowa.length()").value(1))
-				.andExpect(jsonPath("$.zrodla[0].adresEndpointu").doesNotExist());
+				.andExpect(jsonPath("$.zrodla").doesNotExist());
 
-		String importRequest = """
-				{
-				  "zrodloId": "%s",
-				  "zewnetrzneId": "tender-001",
-				  "tytul": "Dostawa rozwiązań Java",
-				  "opis": "Wdrożenie systemu",
-				  "kategoria": "IT",
-				  "lokalizacja": "Rzesztuff",
-				  "terminSkladaniaOfert": "%s",
-				  "adresZrodla": "https://api.example.test/tenders/1"
-				}
-				""".formatted(sourceId, LocalDateTime.now().plusDays(7).withNano(0));
-		String firstImport = mockMvc.perform(post("/api/internal/tenders")
-						.header("X-Ingestion-Key", "test-ingestion-key")
+		String firstTender = mockMvc.perform(post("/api/przetargi")
+						.with(csrf())
+						.session(adminSession)
+						.param("organizatorId", admin.getId().toString())
 						.contentType(MediaType.APPLICATION_JSON)
-						.content(importRequest))
+						.content("""
+								{
+								  "tytul": "Dostawa rozwiązań Java",
+								  "opis": "Wdrożenie systemu",
+								  "kategoria": "IT",
+								  "lokalizacja": "Rzeszów",
+								  "terminSkladaniaOfert": "%s"
+								}
+								""".formatted(LocalDateTime.now().plusDays(7).withNano(0))))
 				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.nowy").value(true))
 				.andExpect(jsonPath("$.statusOperacyjny").value("INTERESUJACY"))
 				.andExpect(jsonPath("$.punktacja").value(5))
 				.andReturn().getResponse().getContentAsString();
-		String tenderId = extractId(firstImport);
+		String tenderId = extractId(firstTender);
+
+		mockMvc.perform(post("/api/przetargi")
+						.with(csrf())
+						.session(adminSession)
+						.param("organizatorId", admin.getId().toString())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{
+								  "tytul": "Dostawa Java wykluczone",
+								  "opis": "Wdrożenie systemu",
+								  "kategoria": "IT",
+								  "lokalizacja": "Rzeszów",
+								  "terminSkladaniaOfert": "%s"
+								}
+								""".formatted(LocalDateTime.now().plusDays(8).withNano(0))))
+				.andExpect(status().isCreated())
+				.andExpect(jsonPath("$.statusOperacyjny").value("ODRZUCONY"))
+				.andExpect(jsonPath("$.punktacja").value(5));
 
 		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 						.patch("/api/przetargi/{id}/status", tenderId)
@@ -314,19 +306,6 @@ class PrzetargAppApplicationTests {
 		mockMvc.perform(get("/api/przetargi/{id}", tenderId).session(adminSession))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.statusOperacyjny").value("INTERESUJACY"));
-		mockMvc.perform(post("/api/internal/tenders")
-						.header("X-Ingestion-Key", "wrong-key")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(importRequest))
-				.andExpect(status().isUnauthorized());
-
-		mockMvc.perform(post("/api/internal/tenders")
-						.header("X-Ingestion-Key", "test-ingestion-key")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(importRequest))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.nowy").value(false));
-
 		mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
 						.patch("/api/przetargi/{id}/status", tenderId)
 						.with(csrf())
@@ -338,24 +317,6 @@ class PrzetargAppApplicationTests {
 		mockMvc.perform(get("/api/przetargi/{id}", tenderId).session(regularSession))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.statusOperacyjny").value("NOWY"));
-		mockMvc.perform(post("/api/internal/tenders")
-						.header("X-Ingestion-Key", "test-ingestion-key")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(importRequest))
-				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.statusOperacyjny").value("INTERESUJACY"));
-
-		String excludedTenderRequest = importRequest
-				.replace("tender-001", "tender-002")
-				.replace("Dostawa rozwiązań Java", "Dostawa Java wykluczone");
-		mockMvc.perform(post("/api/internal/tenders")
-						.header("X-Ingestion-Key", "test-ingestion-key")
-						.contentType(MediaType.APPLICATION_JSON)
-						.content(excludedTenderRequest))
-				.andExpect(status().isCreated())
-				.andExpect(jsonPath("$.statusOperacyjny").value("ODRZUCONY"))
-				.andExpect(jsonPath("$.punktacja").value(5));
-
 		mockMvc.perform(get("/api/przetargi/{id}/historia", tenderId).session(adminSession))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(2));
@@ -364,14 +325,12 @@ class PrzetargAppApplicationTests {
 				.andExpect(jsonPath("$.length()").value(2));
 		mockMvc.perform(get("/api/przetargi")
 						.param("status", "ODRZUCONY")
-						.param("zrodloId", sourceId)
 						.param("minPunktacja", "5")
 						.session(adminSession))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(2));
 		mockMvc.perform(get("/api/przetargi")
 						.param("status", "ODRZUCONY")
-						.param("zrodloId", sourceId)
 						.param("minPunktacja", "5")
 						.session(regularSession))
 				.andExpect(status().isOk())
@@ -383,7 +342,6 @@ class PrzetargAppApplicationTests {
 				.andExpect(jsonPath("$.statusOperacyjny").value("INTERESUJACY"));
 		mockMvc.perform(get("/api/przetargi")
 						.param("status", "INTERESUJACY")
-						.param("zrodloId", sourceId)
 						.param("minPunktacja", "5")
 						.session(anotherSession))
 				.andExpect(status().isOk())
@@ -429,6 +387,24 @@ class PrzetargAppApplicationTests {
 						.content("""
 								{"email":"%s","haslo":"noweHaslo123"}
 								""".formatted(email)))
+				.andExpect(status().isOk());
+
+		mockMvc.perform(put("/api/users/admin/{id}/rola", userId)
+						.with(csrf())
+						.session(adminSession)
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"rola\":\"ADMIN\"}"))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.rola").value("ADMIN"));
+		MockHttpSession promotedAdminSession = (MockHttpSession) mockMvc.perform(post("/api/users/login")
+						.with(csrf())
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("""
+								{"email":"%s","haslo":"noweHaslo123"}
+								""".formatted(email)))
+				.andExpect(status().isOk())
+				.andReturn().getRequest().getSession(false);
+		mockMvc.perform(get("/api/users/admin").session(promotedAdminSession))
 				.andExpect(status().isOk());
 	}
 
