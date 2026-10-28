@@ -27,6 +27,8 @@ public class PrzetargService {
     private final SlowoKluczoweRepository slowoKluczoweRepository;
     private final SilnikKlasyfikacjiPrzetargow silnikKlasyfikacji;
     private final PrzetargHistoriaStatusuRepository historiaRepository;
+    private final PrzetargStatusUzytkownikaRepository statusUzytkownikaRepository;
+    private final PowiadomieniaPrzetargowService powiadomieniaService;
 
     public PrzetargService(
             PrzetargRepository przetargRepository,
@@ -35,7 +37,9 @@ public class PrzetargService {
             ZrodloPrzetarguRepository zrodloRepository,
             SlowoKluczoweRepository slowoKluczoweRepository,
             SilnikKlasyfikacjiPrzetargow silnikKlasyfikacji,
-            PrzetargHistoriaStatusuRepository historiaRepository) {
+            PrzetargHistoriaStatusuRepository historiaRepository,
+            PrzetargStatusUzytkownikaRepository statusUzytkownikaRepository,
+            PowiadomieniaPrzetargowService powiadomieniaService) {
         this.przetargRepository = przetargRepository;
         this.ofertaRepository = ofertaRepository;
         this.userRepository = userRepository;
@@ -43,11 +47,13 @@ public class PrzetargService {
         this.slowoKluczoweRepository = slowoKluczoweRepository;
         this.silnikKlasyfikacji = silnikKlasyfikacji;
         this.historiaRepository = historiaRepository;
+        this.statusUzytkownikaRepository = statusUzytkownikaRepository;
+        this.powiadomieniaService = powiadomieniaService;
     }
 
     @Transactional(readOnly = true)
     public List<PrzetargResponse> listaPrzetargow() {
-        return listaPrzetargow(null, null, null, null, null, null, null, null);
+        return listaPrzetargow(null, null, null, null, null, null, null, null, null);
     }
 
     @Transactional(readOnly = true)
@@ -59,7 +65,8 @@ public class PrzetargService {
             Integer maxPunktacja,
             UUID zrodloId,
             UUID slowoId,
-            String query) {
+            String query,
+            UUID uzytkownikId) {
         if (od != null && doDaty != null && od.isAfter(doDaty)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Data początkowa nie może być późniejsza od końcowej");
         }
@@ -71,9 +78,6 @@ public class PrzetargService {
                 : "%" + query.trim().toLowerCase(Locale.ROOT) + "%";
         Specification<Przetarg> specification = (root, criteriaQuery, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
-            if (status != null) {
-                predicates.add(criteriaBuilder.equal(root.get("statusOperacyjny"), status));
-            }
             if (od != null) {
                 predicates.add(criteriaBuilder.greaterThanOrEqualTo(root.get("dataUtworzenia"), od));
             }
@@ -104,8 +108,19 @@ public class PrzetargService {
             criteriaQuery.orderBy(criteriaBuilder.desc(root.get("dataUtworzenia")));
             return criteriaBuilder.and(predicates.toArray(Predicate[]::new));
         };
-        return przetargRepository.findAll(specification).stream()
-                .map(this::mapToResponse)
+        List<Przetarg> przetargi = przetargRepository.findAll(specification);
+        java.util.Map<UUID, StatusOperacyjny> statusyUzytkownika = uzytkownikId == null || przetargi.isEmpty()
+                ? java.util.Map.of()
+                : statusUzytkownikaRepository.findAllByUzytkownikIdAndPrzetargIdIn(
+                                uzytkownikId, przetargi.stream().map(Przetarg::getId).toList())
+                        .stream()
+                        .collect(java.util.stream.Collectors.toMap(
+                                PrzetargStatusUzytkownika::getPrzetargId,
+                                PrzetargStatusUzytkownika::getStatus));
+        return przetargi.stream()
+                .map(przetarg -> mapToResponse(
+                        przetarg, statusyUzytkownika.getOrDefault(przetarg.getId(), przetarg.getStatusOperacyjny())))
+                .filter(przetarg -> status == null || przetarg.statusOperacyjny() == status)
                 .toList();
     }
 
@@ -124,14 +139,15 @@ public class PrzetargService {
     }
 
     @Transactional(readOnly = true)
-    public PrzetargResponse pobierz(UUID id) {
-        return mapToResponse(znajdzPrzetarg(id));
+    public PrzetargResponse pobierz(UUID id, UUID uzytkownikId) {
+        Przetarg przetarg = znajdzPrzetarg(id);
+        return mapToResponse(przetarg, statusUzytkownika(przetarg.getId(), uzytkownikId));
     }
 
     @Transactional(readOnly = true)
-    public List<PrzetargHistoriaStatusuResponse> historiaStatusow(UUID przetargId) {
+    public List<PrzetargHistoriaStatusuResponse> historiaStatusow(UUID przetargId, UUID uzytkownikId) {
         znajdzPrzetarg(przetargId);
-        return historiaRepository.findByPrzetargIdOrderByDataZmianyDesc(przetargId).stream()
+        return historiaRepository.findVisibleForUser(przetargId, uzytkownikId).stream()
                 .map(historia -> new PrzetargHistoriaStatusuResponse(
                         historia.getId(), historia.getPoprzedniStatus(), historia.getNowyStatus(),
                         historia.getZmienilUzytkownik(), historia.getDataZmiany()))
@@ -155,29 +171,40 @@ public class PrzetargService {
     }
 
     @Transactional(readOnly = true)
-    public List<PrzetargResponse> przetargiOrganizatora(UUID organizatorId) {
+    public List<PrzetargResponse> przetargiOrganizatora(UUID organizatorId, UUID uzytkownikId) {
         znajdzOrganizatora(organizatorId);
-        return przetargRepository.findByOrganizatorIdOrderByDataUtworzeniaDesc(organizatorId).stream()
-                .map(this::mapToResponse)
+        List<Przetarg> przetargi = przetargRepository.findByOrganizatorIdOrderByDataUtworzeniaDesc(organizatorId);
+        java.util.Map<UUID, StatusOperacyjny> statusyUzytkownika = statusyUzytkownika(przetargi, uzytkownikId);
+        return przetargi.stream()
+                .map(przetarg -> mapToResponse(
+                        przetarg, statusyUzytkownika.getOrDefault(przetarg.getId(), przetarg.getStatusOperacyjny())))
                 .toList();
     }
 
     @Transactional
-    public PrzetargResponse zamknij(UUID przetargId, UUID organizatorId) {
+    public PrzetargResponse zamknij(UUID przetargId, UUID organizatorId, UUID uzytkownikId) {
         Przetarg przetarg = znajdzPrzetarg(przetargId);
         if (przetarg.getOrganizator() == null || !przetarg.getOrganizator().getId().equals(organizatorId)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Tylko organizator przetargu może go zamknąć");
         }
         przetarg.setStatus(StatusPrzetargu.ZAMKNIETY);
-        return mapToResponse(przetarg);
+        return mapToResponse(przetarg, statusUzytkownika(przetargId, uzytkownikId));
     }
 
     @Transactional
     public PrzetargResponse zmienStatusOperacyjny(UUID przetargId, StatusOperacyjny status, UUID requesterId) {
         Przetarg przetarg = znajdzPrzetarg(przetargId);
-        przetarg.setStatusUstawionyRecznie(true);
-        silnikKlasyfikacji.zmienStatus(przetarg, status, silnikKlasyfikacji.idUzytkownika(requesterId));
-        return mapToResponse(przetargRepository.save(przetarg));
+        StatusOperacyjny poprzedniStatus = statusUzytkownika(przetargId, requesterId);
+        PrzetargStatusUzytkownika statusUzytkownika = statusUzytkownikaRepository
+                .findByUzytkownikIdAndPrzetargId(requesterId, przetargId)
+                .orElseGet(() -> PrzetargStatusUzytkownika.builder()
+                        .uzytkownikId(requesterId)
+                        .przetargId(przetargId)
+                        .build());
+        statusUzytkownika.setStatus(status);
+        statusUzytkownikaRepository.save(statusUzytkownika);
+        silnikKlasyfikacji.zapiszZmianeStatusuUzytkownika(przetarg, poprzedniStatus, status, requesterId);
+        return mapToResponse(przetarg, status);
     }
 
     @Transactional
@@ -208,6 +235,7 @@ public class PrzetargService {
         przetarg = przetargRepository.save(przetarg);
         silnikKlasyfikacji.klasyfikuj(przetarg, silnikKlasyfikacji.uzytkownikSystemowy());
         przetarg = przetargRepository.save(przetarg);
+        powiadomieniaService.dodajNowyInteresujacy(przetarg, nowy);
         return new WynikImportuResponse(
                 przetarg.getId(), nowy, przetarg.getStatusOperacyjny(), przetarg.getPunktacja());
     }
@@ -263,7 +291,32 @@ public class PrzetargService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Nie znaleziono przetargu"));
     }
 
+    private StatusOperacyjny statusUzytkownika(UUID przetargId, UUID uzytkownikId) {
+        if (uzytkownikId == null) {
+            return znajdzPrzetarg(przetargId).getStatusOperacyjny();
+        }
+        return statusUzytkownikaRepository.findByUzytkownikIdAndPrzetargId(uzytkownikId, przetargId)
+                .map(PrzetargStatusUzytkownika::getStatus)
+                .orElseGet(() -> znajdzPrzetarg(przetargId).getStatusOperacyjny());
+    }
+
+    private java.util.Map<UUID, StatusOperacyjny> statusyUzytkownika(List<Przetarg> przetargi, UUID uzytkownikId) {
+        if (przetargi.isEmpty()) {
+            return java.util.Map.of();
+        }
+        return statusUzytkownikaRepository.findAllByUzytkownikIdAndPrzetargIdIn(
+                        uzytkownikId, przetargi.stream().map(Przetarg::getId).toList())
+                .stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        PrzetargStatusUzytkownika::getPrzetargId,
+                        PrzetargStatusUzytkownika::getStatus));
+    }
+
     private PrzetargResponse mapToResponse(Przetarg przetarg) {
+        return mapToResponse(przetarg, przetarg.getStatusOperacyjny());
+    }
+
+    private PrzetargResponse mapToResponse(Przetarg przetarg, StatusOperacyjny statusOperacyjny) {
         String status = przetarg.getStatus() == StatusPrzetargu.ZAMKNIETY
                 ? "ZAMKNIETY"
                 : przetarg.getTerminSkladaniaOfert().isAfter(LocalDateTime.now()) ? "OTWARTY" : "ZAKONCZONY";
@@ -286,7 +339,7 @@ public class PrzetargService {
                         ? "Źródło: " + (przetarg.getZrodlo() == null ? "zewnętrzne" : przetarg.getZrodlo().getNazwa())
                         : przetarg.getOrganizator().getImie() + " " + przetarg.getOrganizator().getNazwisko(),
                 ofertaRepository.countByPrzetargId(przetarg.getId()),
-                przetarg.getStatusOperacyjny(),
+                statusOperacyjny,
                 przetarg.getPunktacja(),
                 przetarg.getZrodlo() == null ? null : przetarg.getZrodlo().getId(),
                 przetarg.getZrodlo() == null ? null : przetarg.getZrodlo().getNazwa(),

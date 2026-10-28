@@ -77,6 +77,14 @@ Mapowania `fields` wskazują ścieżki w rekordzie źródłowym do pól wymagany
 
 Worker pobiera tylko aktywne źródła. Dla każdego ogłoszenia wysyła żądanie do Java API. Identyfikator ogłoszenia w ramach źródła jest kluczem deduplikacji: ponowny import aktualizuje istniejący rekord zamiast tworzyć duplikat. Projekt zawiera adapter dla konfigurowalnych API JSON; konkretne API może wymagać własnego mapowania pól, parametrów i nagłówków. Harmonogram nie obsługuje obecnie paginacji API.
 
+### Powiadomienia o nowych przetargach
+
+Worker wykonuje pierwszy przebieg po uruchomieniu, a następnie pobiera źródła zgodnie z `INGESTION_INTERVAL_SECONDS`. Każdy rekord przekazuje do Java API; Java zapisuje nowy przetarg, klasyfikuje go aktywnymi regułami i umieszcza powiadomienie w kolejce tylko wtedy, gdy jest nowy i ma automatyczny status `INTERESUJACY`. Ponowny import tego samego identyfikatora nie tworzy kolejnego powiadomienia.
+
+Aby wysyłać powiadomienia na komunikator, ustaw `TENDER_NOTIFICATION_WEBHOOK_URL` w `.env` na adres przychodzącego webhooka Slack lub własnego endpointu zgodnego z JSON-em `{ "text": "..." }`. Java sprawdza kolejkę co 30 sekund, wysyła tytuł, kategorię, lokalizację, termin oraz — jeśli istnieje — link do ogłoszenia. Przy błędzie zachowuje powiadomienie w PostgreSQL i ponawia próbę z rosnącymi odstępami (maksymalnie 8 prób); ostatni błąd znajduje się w logach aplikacji. Po ośmiu nieudanych próbach wpis pozostaje w bazie do ręcznej diagnostyki, ale nie jest automatycznie ponawiany. Gdy webhook jest pusty, wysyłka jest wyłączona, a import i harmonogram działają normalnie.
+
+Webhook jest sekretem: nie zapisuj jego adresu w repozytorium i preferuj adres HTTPS. Po zmianie `.env` zastosuj ustawienie poleceniem `docker compose up -d --force-recreate app`.
+
 ## Reguły klasyfikacji i widok operacyjny
 
 Administrator dodaje w panelu reguły `POSZUKIWANE` i `WYKLUCZAJACE`, kategorię/tag oraz wagę punktową. Reguły są dopasowywane bez rozróżniania wielkości liter do tytułu i opisu:
@@ -87,7 +95,7 @@ Administrator dodaje w panelu reguły `POSZUKIWANE` i `WYKLUCZAJACE`, kategorię
 - dodatnia punktacja bez frazy wykluczającej daje `INTERESUJACY`;
 - `NOWY` jest statusem początkowym przed klasyfikacją lub ręcznym rozstrzygnięciem.
 
-Zmiana reguł ponownie klasyfikuje zapisane ogłoszenia, ale nie nadpisuje statusu oznaczonego jako ustawiony ręcznie. Użytkownik może zmieniać status z tabeli, a zmiany trafiają do historii. Panel przetargów filtruje po statusie, dacie utworzenia (`od`, `doDaty`), punktacji (`minPunktacja`, `maxPunktacja`), źródle (`zrodloId`), dopasowanym słowie (`slowoId`) i tekście (`query`, szukanie w tytule, opisie, kategorii i lokalizacji). Statystyki lejka i skuteczność fraz są dostępne administratorowi w panelu.
+Zmiana reguł ponownie klasyfikuje zapisane ogłoszenia. Status wynikający z automatycznej klasyfikacji jest wspólną wartością bazową; ręczny status użytkownika jest zapisywany osobno dla pary przetarg–użytkownik i nie zmienia widoku pozostałych osób. Lista, szczegóły i filtr statusu pokazują zalogowanemu użytkownikowi jego własny status, a gdy go nie ustawił — status bazowy. W tabeli zmiana statusu zapisuje się natychmiast po wyborze nowej wartości z listy (jedno działanie, bez dodatkowego przycisku zapisu). Historia statusów pokazuje automatyczne zdarzenia oraz zmiany bieżącego użytkownika. Przy migracji Flyway V2 dotychczasowe ręczne zmiany rozdzielane są na podstawie zapisanych identyfikatorów użytkowników. Statystyki lejka i skuteczność fraz pokazują globalną automatyczną klasyfikację, nie osobiste statusy. Panel przetargów filtruje także po dacie utworzenia (`od`, `doDaty`), punktacji (`minPunktacja`, `maxPunktacja`), źródle (`zrodloId`), dopasowanym słowie (`slowoId`) i tekście (`query`, szukanie w tytule, opisie, kategorii i lokalizacji).
 
 Status operacyjny (`NOWY`, `INTERESUJACY`, `ODRZUCONY`) jest oddzielony od statusu postępowania (`OTWARTY`, `ZAMKNIETY` lub wyliczonego `ZAKONCZONY`).
 

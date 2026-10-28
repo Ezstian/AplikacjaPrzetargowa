@@ -64,7 +64,7 @@
 
         <section>
             <div class="mb-4 flex items-end justify-between gap-4">
-                <div><h2 class="text-2xl font-bold">Dostępne przetargi</h2><p class="mt-1 text-sm text-slate-400">Aktualne i zakończone postępowania.</p></div>
+                <div><h2 class="text-2xl font-bold">Tabela przetargów</h2><p class="mt-1 text-sm text-slate-400">Filtruj postępowania i wybierz status z listy, aby zapisać go jednym kliknięciem.</p></div>
                 <span id="tenderCount" class="text-sm text-slate-400"></span>
             </div>
             <form id="tenderFilters" class="mb-6 grid gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -109,7 +109,7 @@
             <div id="tenders" class="space-y-8">
                 <section id="newTendersSection">
                     <div class="mb-3 flex items-center justify-between">
-                        <h3 class="text-xl font-bold">Nowe / do weryfikacji</h3>
+                        <h3 class="text-xl font-bold">Spełniające wymagania / nowe</h3>
                         <span id="newTendersCount" class="text-sm text-slate-400"></span>
                     </div>
                     <div class="overflow-x-auto rounded-xl border border-slate-800">
@@ -123,7 +123,7 @@
                 </section>
                 <section id="interestingTendersSection">
                     <div class="mb-3 flex items-center justify-between">
-                        <h3 class="text-xl font-bold">Interesujące</h3>
+                        <h3 class="text-xl font-bold">Interesujące / wybrane do oferty</h3>
                         <span id="interestingTendersCount" class="text-sm text-slate-400"></span>
                     </div>
                     <div class="overflow-x-auto rounded-xl border border-slate-800">
@@ -244,6 +244,27 @@
             return operationalStatuses.find(([value]) => value === status)?.[1] || status;
         }
 
+        async function saveTenderStatus(tender, statusSelect, statusResult) {
+            const previousStatus = tender.statusOperacyjny;
+            statusSelect.disabled = true;
+            statusResult.textContent = 'Zapisywanie…';
+            statusResult.className = 'text-xs text-slate-400';
+            try {
+                await api(`/api/przetargi/${tender.id}/status`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: statusSelect.value })
+                });
+                await loadAll();
+            } catch (error) {
+                statusSelect.value = previousStatus;
+                statusResult.textContent = error.message;
+                statusResult.className = 'text-xs text-rose-300';
+            } finally {
+                statusSelect.disabled = false;
+            }
+        }
+
         function tenderCard(tender, allowOffer) {
             const card = document.createElement('article');
             card.className = 'rounded-2xl border border-slate-800 bg-slate-900/70 p-5';
@@ -270,11 +291,11 @@
             );
             card.append(meta);
 
-            const statusForm = document.createElement('form');
-            statusForm.className = 'mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-4';
+            const statusActions = document.createElement('div');
+            statusActions.className = 'mt-4 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-4';
             const statusSelect = document.createElement('select');
             statusSelect.className = 'rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white';
-            statusSelect.setAttribute('aria-label', `Zmień status: ${tender.tytul}`);
+            statusSelect.setAttribute('aria-label', `Zmień status przetargu: ${tender.tytul}`);
             operationalStatuses.forEach(([value, label]) => {
                 const option = document.createElement('option');
                 option.value = value;
@@ -282,31 +303,10 @@
                 option.selected = tender.statusOperacyjny === value;
                 statusSelect.append(option);
             });
-            const statusButton = createText(
-                'button',
-                'rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold hover:border-cyan-400',
-                'Zmień status'
-            );
-            statusButton.type = 'submit';
-            const statusResult = createText('span', 'hidden text-sm', '');
-            statusForm.append(statusSelect, statusButton, statusResult);
-            statusForm.addEventListener('submit', async event => {
-                event.preventDefault();
-                statusButton.disabled = true;
-                try {
-                    await api(`/api/przetargi/${tender.id}/status`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: statusSelect.value })
-                    });
-                    await loadAll();
-                } catch (error) {
-                    showMessage(statusResult, error.message);
-                } finally {
-                    statusButton.disabled = false;
-                }
-            });
-            card.append(statusForm);
+            const statusResult = createText('span', 'text-xs text-slate-400', '');
+            statusSelect.addEventListener('change', () => saveTenderStatus(tender, statusSelect, statusResult));
+            statusActions.append(statusSelect, statusResult);
+            card.append(statusActions);
 
             if (allowOffer && tender.status === 'OTWARTY' && tender.organizatorId !== currentUser.id) {
                 const form = document.createElement('form');
@@ -384,39 +384,16 @@
 
             const actionsCell = document.createElement('td');
             actionsCell.className = 'px-4 py-4';
-            const statusForm = document.createElement('form');
-            statusForm.className = 'flex items-center gap-2';
             const statusSelect = document.createElement('select');
             statusSelect.className = 'rounded-lg border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-white';
-            statusSelect.setAttribute('aria-label', `Zmień status: ${tender.tytul}`);
+            statusSelect.setAttribute('aria-label', `Zmień status przetargu: ${tender.tytul}`);
             operationalStatuses.forEach(([value, label]) => {
                 const option = new Option(label, value, false, tender.statusOperacyjny === value);
                 statusSelect.add(option);
             });
-            const statusButton = createText(
-                'button',
-                'rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold hover:border-cyan-400',
-                'Zapisz'
-            );
-            statusButton.type = 'submit';
-            statusForm.append(statusSelect, statusButton);
-            statusForm.addEventListener('submit', async event => {
-                event.preventDefault();
-                statusButton.disabled = true;
-                try {
-                    await api(`/api/przetargi/${tender.id}/status`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ status: statusSelect.value })
-                    });
-                    await loadAll();
-                } catch (error) {
-                    showMessage(document.getElementById('pageMessage'), error.message);
-                } finally {
-                    statusButton.disabled = false;
-                }
-            });
-            actionsCell.append(statusForm);
+            const statusResult = createText('span', 'mt-2 block text-xs text-slate-400', '');
+            statusSelect.addEventListener('change', () => saveTenderStatus(tender, statusSelect, statusResult));
+            actionsCell.append(statusSelect, statusResult);
 
             if (allowOffer && tender.status === 'OTWARTY' && tender.organizatorId !== currentUser.id) {
                 const offerForm = document.createElement('form');

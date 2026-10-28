@@ -32,6 +32,9 @@ public class PrzetargHistoriaStatusu {
     @Column(length = 160)
     private String zmienilUzytkownik;
 
+    @Column(name = "uzytkownik_id")
+    private UUID uzytkownikId;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime dataZmiany;
 

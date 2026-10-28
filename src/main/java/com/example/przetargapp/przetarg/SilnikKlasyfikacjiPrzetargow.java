@@ -71,6 +71,23 @@ public class SilnikKlasyfikacjiPrzetargow {
                 .build());
     }
 
+    public void zapiszZmianeStatusuUzytkownika(
+            Przetarg przetarg,
+            StatusOperacyjny poprzedniStatus,
+            StatusOperacyjny nowyStatus,
+            UUID uzytkownikId) {
+        if (poprzedniStatus == nowyStatus) {
+            return;
+        }
+        historiaRepository.save(PrzetargHistoriaStatusu.builder()
+                .przetarg(przetarg)
+                .poprzedniStatus(poprzedniStatus)
+                .nowyStatus(nowyStatus)
+                .zmienilUzytkownik(idUzytkownika(uzytkownikId))
+                .uzytkownikId(uzytkownikId)
+                .build());
+    }
+
     public String uzytkownikSystemowy() {
         return "SYSTEM";
     }

@@ -226,6 +226,14 @@ class PrzetargAppApplicationTests {
 				.andExpect(status().is3xxRedirection())
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
 						.header().string("Location", "/Logowanie.html"));
+		mockMvc.perform(get("/PanelPrzetargow.html").session(regularSession))
+				.andExpect(status().isOk())
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.string(org.hamcrest.Matchers.containsString("id=\"newTendersSection\"")))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.string(org.hamcrest.Matchers.containsString("id=\"interestingTendersSection\"")))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+						.string(org.hamcrest.Matchers.containsString("statusSelect.addEventListener('change'")));
 
 		String sourceResponse = mockMvc.perform(post("/api/zrodla")
 						.with(csrf())
@@ -303,6 +311,9 @@ class PrzetargAppApplicationTests {
 						.content("{\"status\":\"NOWY\"}"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.statusOperacyjny").value("NOWY"));
+		mockMvc.perform(get("/api/przetargi/{id}", tenderId).session(adminSession))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.statusOperacyjny").value("INTERESUJACY"));
 		mockMvc.perform(post("/api/internal/tenders")
 						.header("X-Ingestion-Key", "wrong-key")
 						.contentType(MediaType.APPLICATION_JSON)
@@ -324,12 +335,15 @@ class PrzetargAppApplicationTests {
 						.content("{\"status\":\"ODRZUCONY\"}"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.statusOperacyjny").value("ODRZUCONY"));
+		mockMvc.perform(get("/api/przetargi/{id}", tenderId).session(regularSession))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.statusOperacyjny").value("NOWY"));
 		mockMvc.perform(post("/api/internal/tenders")
 						.header("X-Ingestion-Key", "test-ingestion-key")
 						.contentType(MediaType.APPLICATION_JSON)
 						.content(importRequest))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.statusOperacyjny").value("ODRZUCONY"));
+				.andExpect(jsonPath("$.statusOperacyjny").value("INTERESUJACY"));
 
 		String excludedTenderRequest = importRequest
 				.replace("tender-001", "tender-002")
@@ -344,7 +358,10 @@ class PrzetargAppApplicationTests {
 
 		mockMvc.perform(get("/api/przetargi/{id}/historia", tenderId).session(adminSession))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.length()").value(3));
+				.andExpect(jsonPath("$.length()").value(2));
+		mockMvc.perform(get("/api/przetargi/{id}/historia", tenderId).session(regularSession))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(2));
 		mockMvc.perform(get("/api/przetargi")
 						.param("status", "ODRZUCONY")
 						.param("zrodloId", sourceId)
@@ -352,10 +369,29 @@ class PrzetargAppApplicationTests {
 						.session(adminSession))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(2));
+		mockMvc.perform(get("/api/przetargi")
+						.param("status", "ODRZUCONY")
+						.param("zrodloId", sourceId)
+						.param("minPunktacja", "5")
+						.session(regularSession))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1));
+		User anotherUser = createUser("Another", "another-" + UUID.randomUUID() + "@example.com", Rola.USER);
+		MockHttpSession anotherSession = login(anotherUser.getEmail());
+		mockMvc.perform(get("/api/przetargi/{id}", tenderId).session(anotherSession))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.statusOperacyjny").value("INTERESUJACY"));
+		mockMvc.perform(get("/api/przetargi")
+						.param("status", "INTERESUJACY")
+						.param("zrodloId", sourceId)
+						.param("minPunktacja", "5")
+						.session(anotherSession))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1));
 		mockMvc.perform(get("/api/analytics/przetargi").session(adminSession))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.liczbaWszystkich").value(2))
-				.andExpect(jsonPath("$.liczbaOdrzuconych").value(2));
+				.andExpect(jsonPath("$.liczbaOdrzuconych").value(1));
 	}
 
 	@Test

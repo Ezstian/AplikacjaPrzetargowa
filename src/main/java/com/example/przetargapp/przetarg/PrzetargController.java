@@ -25,8 +25,11 @@ public class PrzetargController {
             @RequestParam(required = false) Integer maxPunktacja,
             @RequestParam(required = false) UUID zrodloId,
             @RequestParam(required = false) UUID slowoId,
-            @RequestParam(required = false) String query) {
-        return przetargService.listaPrzetargow(status, od, doDaty, minPunktacja, maxPunktacja, zrodloId, slowoId, query);
+            @RequestParam(required = false) String query,
+            Authentication authentication) {
+        UUID userId = UUID.fromString(authentication.getName());
+        return przetargService.listaPrzetargow(
+                status, od, doDaty, minPunktacja, maxPunktacja, zrodloId, slowoId, query, userId);
     }
 
     @GetMapping("/filtry")
@@ -35,13 +38,14 @@ public class PrzetargController {
     }
 
     @GetMapping("/{id}")
-    public PrzetargResponse szczegoly(@PathVariable UUID id) {
-        return przetargService.pobierz(id);
+    public PrzetargResponse szczegoly(@PathVariable UUID id, Authentication authentication) {
+        return przetargService.pobierz(id, UUID.fromString(authentication.getName()));
     }
 
     @GetMapping("/{id}/historia")
-    public List<PrzetargHistoriaStatusuResponse> historiaStatusow(@PathVariable UUID id) {
-        return przetargService.historiaStatusow(id);
+    public List<PrzetargHistoriaStatusuResponse> historiaStatusow(
+            @PathVariable UUID id, Authentication authentication) {
+        return przetargService.historiaStatusow(id, UUID.fromString(authentication.getName()));
     }
 
     @PostMapping
@@ -57,14 +61,14 @@ public class PrzetargController {
     @GetMapping("/organizator/{id}")
     public List<PrzetargResponse> przetargiOrganizatora(@PathVariable UUID id, Authentication authentication) {
         requireSelfOrAdmin(id, authentication);
-        return przetargService.przetargiOrganizatora(id);
+        return przetargService.przetargiOrganizatora(id, UUID.fromString(authentication.getName()));
     }
 
     @PostMapping("/{id}/zamknij")
     public PrzetargResponse zamknij(
             @PathVariable UUID id, @RequestParam UUID organizatorId, Authentication authentication) {
         requireSelfOrAdmin(organizatorId, authentication);
-        return przetargService.zamknij(id, organizatorId);
+        return przetargService.zamknij(id, organizatorId, UUID.fromString(authentication.getName()));
     }
 
     @PatchMapping("/{id}/status")
